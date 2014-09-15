@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 dM=importr('diffusionMap')
 
 array=numpy.loadtxt('../data/trainingPCACoeff.dat')
+array = array[:,0:25]
 nr, nc = array.shape
+
 xvec = robjects.FloatVector(array.reshape(array.size))
 xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
 xr=robjects.r.dist(xr)

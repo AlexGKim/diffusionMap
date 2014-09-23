@@ -1,0 +1,27 @@
+\documentclass[preprint]{aastex}
+\usepackage{amsmath,amssymb}
+\usepackage{mathrsfs}
+\bibliographystyle{plain}
+
+
+\begin{document}
+
+\title{Target Selection}
+\author{Alex Kim}
+
+Procedure for classification to avoid overtraining.
+\begin{itemize}
+\item Organize full classified sample into those we want and do not want to target.
+\item Reserve tenth of full sample (maintaining ratio of targeted and non-targeted objects) as the validation set.
+\item Split remaining sample into 10 voting sets.
+\item Reserve tenth of each voting set  (maintaining ratio of targeted and non-targeted objects) as its optimization set with the complement being its training set.
+\item Train each voting set. 
+\item Assess votes of all voting sets for the validation set.
+\end{itemize}
+
+In the training set, the metric to optimize (with the optimization set) is the purity of target selection: the ratio between correctly identified targeted objects and
+all objects identified as targeted.  An object is classified using diffusion maps.  For a fixed kernel, diffusion distances are calculated 
+between the object and targeted training set, and then independently the non-targeted training set.  The classification is based on from which training set
+the object has the shorter average diffusion distance.
+We fit for the diffusion-map parameters  $t$ and $epsval$ that optimize the metric.
+\end{document}

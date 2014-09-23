@@ -3,7 +3,7 @@
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 
-def function diffuse(nparray, t=t, eps_val=eps_val):
+def diffuse(array, **kwargs):
     
     dM=importr('diffusionMap')
     nr, nc = array.shape
@@ -12,6 +12,6 @@ def function diffuse(nparray, t=t, eps_val=eps_val):
     xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
     xr=robjects.r.dist(xr)
 
-    dmap = robjects.r.diffuse(xr,t=t, eps_val=epsval*factor)
+    dmap = robjects.r.diffuse(xr, **kwargs)
 
     return dmap

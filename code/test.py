@@ -5,23 +5,15 @@ import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 import matplotlib.pyplot as plt
 import matplotlib.colors
+import diffuse
 
 t=1
 epsval=22.84
 factor=1.4
 
-dM=importr('diffusionMap')
-
 array=numpy.loadtxt('../data/trainingPCACoeff.dat')
-#array = array[:,0:15]
-nr, nc = array.shape
-print "Number of points ",nr
 
-xvec = robjects.FloatVector(array.reshape(array.size))
-xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
-xr=robjects.r.dist(xr)
-
-dmap = robjects.r.diffuse(xr,t=t, eps_val=epsval*factor)
+dmap = diffuse.diffuse(array,t=t, eps_val=epsval*factor)
 
 X=numpy.array(dmap.rx('X')[0])
 #eigenmult = numpy.array(dmap.rx('eigenmult')[0])

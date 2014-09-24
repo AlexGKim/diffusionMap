@@ -4,6 +4,15 @@ import numpy
 seed=0
 numpy.random.RandomState(seed)
 
+class OIIcriteria:
+    fluxlimit=8e-17
+    zlimits = [0.6, 1.6]
+
+class Splits:
+    val_frac=0.1
+    opt_frac=0.1
+    n_vote=10
+
 def getcosmos():
     import pyfits
     file = "../data/cosmos-msdesi_filts.fits"
@@ -34,17 +43,18 @@ def main():
     alldata = getcosmos()
 
     #id which are target and which are not
-    targetind = alldata.data['O2'] >= 5e-17
+    targetind = alldata.data['O2'] >= cosmos.OIIcriteria.fluxlimit
+    targetind = numpy.logical_and(targetind, alldata.data['Z'] > cosmos.OIIcriteria.zlimits[0])
+    targetind = numpy.logical_and(targetind, alldata.data['Z'] < cosmos.OIIcriteria.zlimits[1])
     nontargetind = numpy.where(numpy.logical_not(targetind))[0]
     targetind = numpy.where(targetind)[0]
     split = [targetind, nontargetind]
 
     #make validation, training samples
-    val_frac=0.1; opt_frac=0.1;  n_vote=10
-    validate, train =setsplitter(len(split[0]), val_frac, opt_frac, n_vote)
+    validate, train =setsplitter(len(split[0]), cosmos.Splits.val_frac, cosmos.Splits.opt_frac, cosmos.Splits.n_vote)
 
     for i in xrange(1,len(split)):
-      v, t = setsplitter(len(split[i]), val_frac, opt_frac, n_vote)
+      v, t = setsplitter(len(split[i]), cosmos.Splits.val_frac, cosmos.Splits.opt_frac, cosmos.Splits.n_vote)
       validate=numpy.append(validate,v)
       for j in xrange(len(train)):
         train[j][0]=numpy.append(train[j][0],t[j][0])

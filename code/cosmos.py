@@ -43,18 +43,18 @@ def main():
     alldata = getcosmos()
 
     #id which are target and which are not
-    targetind = alldata.data['O2'] >= cosmos.OIIcriteria.fluxlimit
-    targetind = numpy.logical_and(targetind, alldata.data['Z'] > cosmos.OIIcriteria.zlimits[0])
-    targetind = numpy.logical_and(targetind, alldata.data['Z'] < cosmos.OIIcriteria.zlimits[1])
+    targetind = alldata.data['O2'] >= OIIcriteria.fluxlimit
+    targetind = numpy.logical_and(targetind, alldata.data['Z'] > OIIcriteria.zlimits[0])
+    targetind = numpy.logical_and(targetind, alldata.data['Z'] < OIIcriteria.zlimits[1])
     nontargetind = numpy.where(numpy.logical_not(targetind))[0]
     targetind = numpy.where(targetind)[0]
     split = [targetind, nontargetind]
 
     #make validation, training samples
-    validate, train =setsplitter(len(split[0]), cosmos.Splits.val_frac, cosmos.Splits.opt_frac, cosmos.Splits.n_vote)
+    validate, train =setsplitter(len(split[0]), Splits.val_frac, Splits.opt_frac, Splits.n_vote)
 
     for i in xrange(1,len(split)):
-      v, t = setsplitter(len(split[i]), cosmos.Splits.val_frac, cosmos.Splits.opt_frac, cosmos.Splits.n_vote)
+      v, t = setsplitter(len(split[i]), Splits.val_frac, Splits.opt_frac, Splits.n_vote)
       validate=numpy.append(validate,v)
       for j in xrange(len(train)):
         train[j][0]=numpy.append(train[j][0],t[j][0])

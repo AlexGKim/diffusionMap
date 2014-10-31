@@ -1,29 +1,18 @@
 # README #
 
-This README would normally document whatever steps are necessary to get your application up and running.
 
-### What is this repository for? ###
+### Summary ###
 
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
-
-### How do I get set up? ###
-
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
-
-### Contribution guidelines ###
-
-* Writing tests
-* Code review
-* Other guidelines
+* This repository provides tools for the calculation of Diffusion
+Maps. 
+* The current implementation is a python wrapper for diffusionMap
+Package written in R.  The python package rpy2 (http://rpy.sourceforge.net)
+is used to run R within python.  Reference for the R diffusionMap
+ package is found at http://cran.r-project.org/web/packages/diffusionMap/index.html.
+* The only python call available is the function diffuse.diffuse, which
+correponds to the R diffuse function.
+* diffuse.test.py is provided as an example of the usage of diffuse.diffuse
 
 ### Who do I talk to? ###
 
-* Repo owner or admin
-* Other community or team contact
+* Alex Kim (agkim@lbl.gov)

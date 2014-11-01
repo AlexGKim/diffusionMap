@@ -6,9 +6,9 @@ __author__ = 'Alex Kim <agkim@lbl.gov>'
 __contributors__ = ['Danny Goldstein <dgold@berkeley.edu>']
 
 import numpy as np
-#from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
-mpl.use('Agg')
+#mpl.use('Agg')
 import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
@@ -24,9 +24,10 @@ def to_colors(class_arr):
   return [cdict[elem] for elem in class_arr]
   
 # Input files.
+TASK_NAME = 'Tetra'
 FCPS_DIR = '../data/FCPS/01FCPSdata'
-CLASS_FILE = os.path.join(FCPS_DIR, 'Hepta.cls')
-DATA_FILE = os.path.join(FCPS_DIR, 'Hepta.lrn')
+CLASS_FILE = os.path.join(FCPS_DIR, '%s.cls' % TASK_NAME)
+DATA_FILE = os.path.join(FCPS_DIR, '%s.lrn' % TASK_NAME)
 
 
 
@@ -47,6 +48,7 @@ dmap = diffuse.diffuse(data, **kwargs)
 X = np.array(dmap.rx('X')[0])
 
 # Plot. 
+'''
 fig, ax = plt.subplots()
 x, y = X[:, :2].T
 ax.scatter(x, y, c=colors)
@@ -54,9 +56,9 @@ ax.set_xlim(x[x >= -6e14].min(), x[x >= -6e14].max())
 
 # Save.
 fig.savefig('diffmap.pdf', format='pdf')
-
-
 '''
+
+
 # Plot 3D.
 x, y, z = X[: , :3].T
 
@@ -70,5 +72,4 @@ with PdfPages('multipage_diffmap.pdf') as pdf:
       ax.view_init(120 * i, 120 * j)
       pdf.savefig(figure)
       plt.close()
-pdf.close()
-'''
+

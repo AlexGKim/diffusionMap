@@ -1,12 +1,18 @@
 #!/usr/bin/env python
 
+'''Methods to compute diffusion maps in python.'''
+
+__author__ = 'Alex Kim <agkim@lbl.gov>'
+__contributors__ = ['Danny Goldstein <dgold@berkeley.edu>']
+__all__ = ['diffuse']
+
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 
 def diffuse(d, **kwargs):
     '''Uses the pair-wise distance matrix for a data set to compute
-    the diffusion map coefficients. Computes teh Markov transition
-    probability matrix, and its eigenvalues and left and reight
+    the diffusion map coefficients. Computes the Markov transition
+    probability matrix, and its eigenvalues and left and right
     eigenvectors. Returns a `robjects.r.dmap` object.
     
     Parameters:
@@ -22,11 +28,10 @@ def diffuse(d, **kwargs):
         coefficients for each sample.
     '''
 
-    
     dM=importr('diffusionMap')
-    nr, nc = array.shape
+    nr, nc = d.shape
 
-    xvec = robjects.FloatVector(array.reshape(array.size))
+    xvec = robjects.FloatVector(d.reshape(d.size))
     xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
     xr=robjects.r.dist(xr)
 

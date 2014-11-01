@@ -1,38 +1,58 @@
 #!/usr/bin/env python
 
-import numpy
+'''Test the `diffuse` package using the toy 'target' dataset.'''
+
+__author__ = 'Alex Kim <agkim@lbl.gov>'
+__contributors__ = ['Danny Goldstein <dgold@berkeley.edu>']
+
+import numpy as np
+import matplotlib as mpl
+mpl.use('Agg') 
+import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
-import matplotlib.pyplot as plt
-import matplotlib.colors
 import diffuse
+import os
 
-t=1
-epsval=22.84
-factor=1.4
+def to_colors(class_arr):
+  '''Transform an array of class labels into a list of colors.'''
+  
+  print class_arr
+  uq = np.unique(class_arr)
+  cdict = dict(zip(uq, mpl.rcParams['axes.color_cycle'][:len(uq)]))
+  return [cdict[elem] for elem in class_arr]
+  
+# Input files.
+FCPS_DIR = '../data/FCPS/01FCPSdata'
+CLASS_FILE = os.path.join(FCPS_DIR, 'Chainlink.cls')
+DATA_FILE = os.path.join(FCPS_DIR, 'Chainlink.lrn')
 
-array=numpy.loadtxt('../data/trainingPCACoeff.dat')
+# User-specified diffusion map parameters.
+t = 1
+epsval = 22.84
+factor = 1.4
 
-dmap = diffuse.diffuse(array,t=t, eps_val=epsval*factor)
+# Load classes, data.  The first column of each file is a meaningless
+# 1-based index, so we drop it.
+classes = np.squeeze(np.genfromtxt(CLASS_FILE, comments='%')[:, 1:])
+data = np.squeeze(np.genfromtxt(DATA_FILE, comments='%')[:, 1:])
 
-X=numpy.array(dmap.rx('X')[0])
-#eigenmult = numpy.array(dmap.rx('eigenmult')[0])
-#print eigenmult
-#plt.plot(eigenmult,'.')
-#plt.show()
+# Map classes to colors.
+colors = to_colors(classes)
 
-from mpl_toolkits.mplot3d import Axes3D
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ndata = X.shape[0]/10
-for i in xrange(ndata):
-  ax.scatter(X[i*10:(i+1)*10,0],X[i*10:(i+1)*10,1],X[i*10:(i+1)*10,2],norm=matplotlib.colors.Normalize(0,ndata),c=numpy.zeros(10)+i,cmap=plt.get_cmap('gist_rainbow'))
-ax.set_xlabel('X[0]')
-ax.set_ylabel('X[1]')
-ax.set_zlabel('X[2]')
-plt.show()
-print vfwfe
-g1 = X[:,0]<20
-g2 = numpy.logical_and(X[:,0]>=20,X[:,2] > 0)
-g3 = numpy.logical_and(X[:,0]>=20,X[:,2]<=0)
-print numpy.sum(g1),numpy.sum(g2),numpy.sum(g3)
+# Compute diffusion map.
+kwargs = {'t':t,
+          'eps_val':epsval*factor}
+
+dmap = diffuse.diffuse(data, **kwargs)
+
+# Extract new representation.
+X = np.array(dmap.rx('X')[0])
+
+# Plot. 
+fig, ax = plt.subplots()
+x, y = X[:, :2].T
+ax.scatter(x, y, c=colors)
+
+# Save.
+fig.savefig('diffmap.pdf', format='pdf')

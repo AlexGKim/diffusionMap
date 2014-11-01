@@ -1,6 +1,3 @@
-#	Datensatz	Chainlink
-# Nr	Type	
-%	1000	Anz. Datensätze
 1	1	
 2	1	
 3	1	

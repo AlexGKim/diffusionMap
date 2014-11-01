@@ -6,8 +6,8 @@ __author__ = 'Alex Kim <agkim@lbl.gov>'
 __contributors__ = ['Danny Goldstein <dgold@berkeley.edu>']
 
 import numpy as np
+from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
-mpl.use('Agg') 
 import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
@@ -50,9 +50,27 @@ dmap = diffuse.diffuse(data, **kwargs)
 X = np.array(dmap.rx('X')[0])
 
 # Plot. 
+'''
 fig, ax = plt.subplots()
 x, y = X[:, :2].T
 ax.scatter(x, y, c=colors)
 
 # Save.
 fig.savefig('diffmap.pdf', format='pdf')
+
+'''
+
+# Plot 3D.
+x, y, z = X[: , :3].T
+
+from mpl_toolkits.mplot3d import Axes3D
+with PdfPages('multipage_diffmap.pdf') as pdf:
+  for i in range(3):
+    for j in range(3):
+      figure = plt.figure(figsize=(6,6))
+      ax = plt.subplot(111, projection='3d')
+      ax.scatter(x, y, z, c=colors)
+      ax.view_init(120 * i, 120 * j)
+      pdf.savefig(figure)
+      plt.close()
+pdf.close()

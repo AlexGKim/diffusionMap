@@ -6,8 +6,9 @@ __author__ = 'Alex Kim <agkim@lbl.gov>'
 __contributors__ = ['Danny Goldstein <dgold@berkeley.edu>']
 
 import numpy as np
-from matplotlib.backends.backend_pdf import PdfPages
+#from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
@@ -24,13 +25,10 @@ def to_colors(class_arr):
   
 # Input files.
 FCPS_DIR = '../data/FCPS/01FCPSdata'
-CLASS_FILE = os.path.join(FCPS_DIR, 'Chainlink.cls')
-DATA_FILE = os.path.join(FCPS_DIR, 'Chainlink.lrn')
+CLASS_FILE = os.path.join(FCPS_DIR, 'Hepta.cls')
+DATA_FILE = os.path.join(FCPS_DIR, 'Hepta.lrn')
 
-# User-specified diffusion map parameters.
-t = 1
-epsval = 22.84
-factor = 1.4
+
 
 # Load classes, data.  The first column of each file is a meaningless
 # 1-based index, so we drop it.
@@ -41,8 +39,7 @@ data = np.squeeze(np.genfromtxt(DATA_FILE, comments='%')[:, 1:])
 colors = to_colors(classes)
 
 # Compute diffusion map.
-kwargs = {'t':t,
-          'eps_val':epsval*factor}
+kwargs = {}
 
 dmap = diffuse.diffuse(data, **kwargs)
 
@@ -50,16 +47,16 @@ dmap = diffuse.diffuse(data, **kwargs)
 X = np.array(dmap.rx('X')[0])
 
 # Plot. 
-'''
 fig, ax = plt.subplots()
 x, y = X[:, :2].T
 ax.scatter(x, y, c=colors)
+ax.set_xlim(x[x >= -6e14].min(), x[x >= -6e14].max())
 
 # Save.
 fig.savefig('diffmap.pdf', format='pdf')
 
-'''
 
+'''
 # Plot 3D.
 x, y, z = X[: , :3].T
 
@@ -74,3 +71,4 @@ with PdfPages('multipage_diffmap.pdf') as pdf:
       pdf.savefig(figure)
       plt.close()
 pdf.close()
+'''

@@ -28,6 +28,7 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
       not None, the first two diffusion coordinates of out-of-sample
       testing data. 
     '''
+    plt.clf()
     coords = np.array(dmap.rx('X')[0])
     plt.scatter(coords.T[0], coords.T[1], c=bias,
                 norm=plt.matplotlib.colors.Normalize(vmin=-.1, vmax=.1),
@@ -36,13 +37,16 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
     plt.xlabel('diffusion coordinate 1')
     plt.ylabel('diffusion coordinate 2')
     plt.title('RedMaGiC Diffusion Map: Absolute Magnitudes Only')
+    
+    if nystrom and nystrombias:
+        plt.scatter(nystrom.T[0], nystrom.T[1], c=nystrombias,
+                    vmin=-.1, vmax=.1,
+                    cmap=plt.matplotlib.cm.jet, marker='+')
+    
     plt.savefig(fname ,format='pdf')
-    
-    
     
 
 # Load training data
-
 f = pyfits.open('../data/stripe82_run_redmagic-1.0-08.fits')
 data = f[1].data
 
@@ -65,9 +69,10 @@ features_scaled = scaler.fit_transform(features)
 thresh = 0.01
 
 # Split into "good" and "bad" samples
-good_inds = bias <= thresh
+good_inds = abs(bias) <= thresh
+bad_inds = np.logical_not(good_inds)
 td_good = features[good_inds]
-td_bad = features[~good_inds]
+td_bad = features[bad_inds]
 
 # Split into training and testing sets
 X_good_train, X_good_test, y_good_train, y_good_test = \
@@ -76,7 +81,7 @@ X_good_train, X_good_test, y_good_train, y_good_test = \
                                                      test_size=0.1)
 X_bad_train, X_bad_test, y_bad_train, y_bad_test = \
                                     train_test_split(td_bad,
-                                                     bias[~good_inds],
+                                                     bias[bad_inds],
                                                      test_size=0.1)
 
 # Train diffusion maps

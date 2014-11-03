@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-'''Training and testing diffusion maps for the redmagic classification task.'''
+'''Training and testing diffusion maps for the redmagic classification
+task.'''
 
 __author__ = 'Danny Goldstein <dgold@berkeley.edu>'
 
@@ -13,6 +14,25 @@ import matplotlib
 matplotlib.use('Agg')
 import numpy as np
 import matplotlib.pyplot as plt
+
+def scatter(X, bias, marker='+', label=None):
+    '''Add a scatter plot to the current figure. 
+    
+    Parameters
+    ----------
+    
+    X:  diffusion  coordinate  representation  of dataset.  First  two
+       coordinates are used.
+
+    bias: photoz bias of X.
+    
+    marker: the marker to use on the figure.
+    '''
+
+    plt.scatter(X.T[0], X.T[1], c=bias,
+                vmin=-.1, vmax=.1,
+                cmap=plt.matplotlib.cm.jet, 
+                marker=marker, label=label)
 
 def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
     '''After computing the diffusion map for training data, plot the results.
@@ -30,20 +50,15 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
     '''
     plt.clf()
     coords = np.array(dmap.rx('X')[0])
-    plt.scatter(coords.T[0], coords.T[1], c=bias,
-                norm=plt.matplotlib.colors.Normalize(vmin=-.1, vmax=.1),
-                cmap=plt.matplotlib.cm.jet, marker='.')
     plt.colorbar(label='bias')
     plt.xlabel('diffusion coordinate 1')
     plt.ylabel('diffusion coordinate 2')
     plt.title('RedMaGiC Diffusion Map: Absolute Magnitudes Only')
-    
+    scatter(coords, bias, marker='.')
     if nystrom and nystrombias:
-        plt.scatter(nystrom.T[0], nystrom.T[1], c=nystrombias,
-                    vmin=-.1, vmax=.1,
-                    cmap=plt.matplotlib.cm.jet, marker='+')
-    
-    plt.savefig(fname ,format='pdf')
+        scatter(nystrom, nystrombias)
+    if fname is not None:
+        plt.savefig(fname ,format='pdf')
     
 
 # Load training data
@@ -91,3 +106,21 @@ dmap_bad = diffuse.diffuse(X_bad_train)
 # Plot results for good and bad sets.
 plot_dmap(dmap_good, 'good_init.pdf', y_good_train)
 plot_dmap(dmap_bad, 'bad_init.pdf', y_bad_train)
+
+# Nystrom.
+
+goodtest_baddmap = diffuse.nystrom(dmap_bad, X_good_test)
+badtest_baddmap = diffuse.nystrom(dmap_bad, X_bad_test)
+
+goodtest_gooddmap = diffuse.nystrom(dmap_good, X_good_test)
+badtest_gooddmap = diffuse.nystrom(dmap_good, X_bad_test)
+
+plot_dmap(dmap_good, None, y_good_train)
+scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
+scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
+plt.savefig('good_test.pdf', format='pdf')
+
+plot_dmap(dmap_bad, None, y_bad_train)
+scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
+scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias')
+plt.savefig('bad_test.pdf', format='pdf')

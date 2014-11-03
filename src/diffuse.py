@@ -9,6 +9,26 @@ __all__ = ['diffuse']
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 
+def dist(d):
+    '''This function computes and returns the distance matrix computed by
+    using the specified distance measure to compute the distances
+    between the rows of a data matrix.
+    
+    Parameters
+    ----------
+    d: numpy.ndarray with shape (n_samples, n_features).  n-by-m
+        feature matrix for a data set with n points and m features.
+    '''
+    nr, nc = d.shape
+
+    xvec = robjects.FloatVector(d.reshape(d.size))
+    xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
+    xr=robjects.r.dist(xr)
+    
+    return xr
+    
+    
+
 def diffuse(d, **kwargs):
     '''Uses the pair-wise distance matrix for a data set to compute
     the diffusion map coefficients. Computes the Markov transition
@@ -17,10 +37,8 @@ def diffuse(d, **kwargs):
     
     Parameters:
     -----------
-    d: numpy.ndarray with shape (n_samples, n_samples).  n-by-n
-        pairwise distance matrix for a data set with n points or
-        alternatively the output from the rpy2.robjects.r.dist
-        function.
+    d: numpy.ndarray with shape (n_samples, n_features).  n-by-m
+        feature matrix for a data set with n points and m features.
     
     Returns:
     --------
@@ -29,12 +47,8 @@ def diffuse(d, **kwargs):
     '''
 
     dM=importr('diffusionMap')
-    nr, nc = d.shape
-
-    xvec = robjects.FloatVector(d.reshape(d.size))
-    xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
-    xr=robjects.r.dist(xr)
-
+    xr = dist(d)
     dmap = robjects.r.diffuse(xr, **kwargs)
-
     return dmap
+
+

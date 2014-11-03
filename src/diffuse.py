@@ -58,7 +58,7 @@ def nystrom(dmap, d, sigma='default'):
     Parameters
     ----------
   
-    dmap: a ’"dmap"’ object from the original data set, computed by diffuse()
+    dmap: a dmap object from the original data set, computed by diffuse()
 
     d: numpy.ndarray with shape (n_samples, n_features), where
       n_features is the same as the training set to dmap

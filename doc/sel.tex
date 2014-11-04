@@ -9,19 +9,29 @@
 \title{Target Selection}
 \author{Alex Kim}
 
-Procedure for classification to avoid overtraining.
+The objective is to select a high-purity sample with a minimum number of correctly classified emission-line galaxies (ELGs) from a catalog of galaxies that contains for each object
+its magnitude in a number of bands and perhaps other information (e.g.\ shape).  A smaller sample of galaxies with ELG/non-ELG classification is available to
+inform the selection process.
+
+Procedure to avoid overtraining:
 \begin{itemize}
-\item Organize full classified sample into those we want and do not want to target.
-\item Reserve tenth of full sample (maintaining ratio of targeted and non-targeted objects) as the validation set.
-\item Split remaining sample into 10 voting sets.
-\item Reserve tenth of each voting set  (maintaining ratio of targeted and non-targeted objects) as its optimization set with the complement being its training set.
-\item Train each voting set. 
-\item Assess votes of all voting sets for the validation set.
+\item Reserve $x_V\%$ of full sample (maintaining ratio of ELG and non-ELGs) as the Validation set.
+\item Split remaining sample into $N$ Voting sets.
+\item Reserve $x_T\%$ of each Voting set  (again maintaining ratio of ELG and non-ELGs) as its Training set with the complement being its Reference set.
+\item Optimize classification for each Voting set based on performance on the Training set. 
+\item Assess results of all Voting sets for the Validation set.
+\end{itemize}
+For Random Forest classifiers is $N=1$ sufficient to avoid overtraining?  Is this overkill?
+
+Procedure for classification within each Voting set:
+\begin{itemize}
+\item For each Voting set...
+\item   For each object in the Training set...
+\item     Perform separate Diffusion Map reparameterizations for ELGs, and for non-ELGs in the Reference set, for the weight tuning parameter $\epsilon$, and $n=1$.
+The parameters for elements in the Training set are the ``distances'' between the galaxy and each of the objects in the Training set.  The ELG and non-ELGs are
+diffused separately to remove connectivity of potential regions that overlap in the two samples.
+\item Using the new parameterizations of all objects in Training set use Random Forest for classification.
+\item Optimize ELG purity over $\epsilon$ and the parameters of random forest, with a boundary condition that $\ge n$ ELGs are correctly identified.
 \end{itemize}
 
-In the training set, the metric to optimize (with the optimization set) is the purity of target selection: the ratio between correctly identified targeted objects and
-all objects identified as targeted.  An object is classified using diffusion maps.  For a fixed kernel, diffusion distances are calculated 
-between the object and targeted training set, and then independently the non-targeted training set.  The classification is based on from which training set
-the object has the shorter average diffusion distance.
-We fit for the diffusion-map parameters  $t$ and $epsval$ that optimize the metric.
 \end{document}

@@ -14,6 +14,7 @@ import matplotlib
 matplotlib.use('Agg')
 import numpy as np
 import matplotlib.pyplot as plt
+from argparse import ArgumentParser
 
 def scatter(X, bias, marker='+', label=None):
     '''Add a scatter plot to the current figure. 
@@ -61,70 +62,87 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
         plt.savefig(fname ,format='pdf')
     
 
-# Load training data
-f = pyfits.open('../data/stripe82_run_redmagic-1.0-08.fits')
-data = f[1].data
+if __name__ == '__main__':
 
-# Get rid of entries without spectroscopic redshifts.
-inds = data['ZSPEC'] >= 0
-sdata = data[inds]
+    parser = ArgumentParser()
+    parser.add_argument('--save', action='store_true', help='Pickle trained diffusion maps.')
+    parser.add_argument('--load', action='store_true', help='Load trained diffusion maps from pickles.')
+    
+    ins = parser.parse_args()
 
-# Compute bias.
-bias = sdata['ZRED2'] - sdata['ZSPEC']
+    # Load training data
+    f = pyfits.open('../data/stripe82_run_redmagic-1.0-08.fits')
+    data = f[1].data
 
-# Get features for *entire* sample.
-# Use G-R, R-I, I-Z colors and I absolute magnitude as features.
-features = list(sdata['MABS'][:-1] - sdata['MABS'][1:]) # colors
-features.append(sdata['MABS'][:, 2]) # i magnitude
-features = np.array(features)
+    # Get rid of entries without spectroscopic redshifts.
+    inds = data['ZSPEC'] >= 0
+    sdata = data[inds]
 
-# Scale features
-scaler = StandardScaler()
-features_scaled = scaler.fit_transform(features)
+    # Compute bias.
+    bias = sdata['ZRED2'] - sdata['ZSPEC']
 
-# Set a threshold for "good" and "bad" photoz bias
-thresh = 0.01
+    # Get features for *entire* sample.
+    # Use G-R, R-I, I-Z colors and I absolute magnitude as features.
+    features = sdata['MABS'][:, :-1] - sdata['MABS'][:, 1:] # colors
+    features = np.hstack((features, sdata['MABS'][:, 2].reshape(-1, 1))) # i magnitude
 
-# Split into "good" and "bad" samples
-good_inds = abs(bias) <= thresh
-bad_inds = np.logical_not(good_inds)
-td_good = features[good_inds]
-td_bad = features[bad_inds]
+    # Scale features
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(features)
 
-# Split into training and testing sets
-X_good_train, X_good_test, y_good_train, y_good_test = \
-                                    train_test_split(td_good,
-                                                     bias[good_inds],
-                                                     test_size=0.1,
-                                                     random_state=9)
-X_bad_train, X_bad_test, y_bad_train, y_bad_test = \
-                                    train_test_split(td_bad,
-                                                     bias[bad_inds],
-                                                     test_size=0.1,
-                                                     random_state=10)
+    # Set a threshold for "good" and "bad" photoz bias
+    thresh = 0.01
 
-# Train diffusion maps
-dmap_good = diffuse.diffuse(X_good_train)
-dmap_bad = diffuse.diffuse(X_bad_train)
+    # Split into "good" and "bad" samples
+    good_inds = abs(bias) <= thresh
+    bad_inds = np.logical_not(good_inds)
+    td_good = features[good_inds]
+    td_bad = features[bad_inds]
 
-# Plot results for good and bad sets.
-plot_dmap(dmap_good, 'good_init.pdf', y_good_train)
-plot_dmap(dmap_bad, 'bad_init.pdf', y_bad_train)
+    # Split into training and testing sets
+    X_good_train, X_good_test, y_good_train, y_good_test = \
+                                        train_test_split(td_good,
+                                                         bias[good_inds],
+                                                         test_size=0.1,
+                                                         random_state=9)
+    X_bad_train, X_bad_test, y_bad_train, y_bad_test = \
+                                        train_test_split(td_bad,
+                                                         bias[bad_inds],
+                                                         test_size=0.1,
+                                                         random_state=10)
 
-# Nystrom.
+    # Train diffusion maps
+    if not ins.load:
+        dmap_good = diffuse.diffuse(X_good_train)
+        dmap_bad = diffuse.diffuse(X_bad_train)
 
-goodtest_baddmap = diffuse.nystrom(dmap_bad, X_bad_train, X_good_test)
-badtest_baddmap = diffuse.nystrom(dmap_bad, X_bad_train, X_bad_test)
+    else:
+        dmap_good = pickle.load(open('dmap_good.obj','rb'))
+        dmap_bad = pickle.load(open('dmap_bad.obj','rb'))
 
-goodtest_gooddmap = diffuse.nystrom(dmap_good, X_good_train, X_good_test)
-badtest_gooddmap = diffuse.nystrom(dmap_good, X_good_train, X_bad_test)
+    # Save if asked
+    if ins.save:
+        pickle.dump(dmap_good, open('dmap_good.obj','wb'))
+        pickle.dump(dmap_bad, open('dmap_bad.obj','wb'))
 
-plot_dmap(dmap_good, None, y_good_train)
-scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
-scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
-plt.savefig('good_test.pdf', format='pdf')
+    # Plot results for good and bad sets.
+    plot_dmap(dmap_good, 'good_init.pdf', y_good_train)
+    plot_dmap(dmap_bad, 'bad_init.pdf', y_bad_train)
 
-plot_dmap(dmap_bad, None, y_bad_train)
-scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
-scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias')
-plt.savefig('bad_test.pdf', format='pdf')
+    # Nystrom.
+
+    goodtest_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_good_test))
+    badtest_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_bad_test))
+
+    goodtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_good_test))
+    badtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_bad_test))
+
+    plot_dmap(dmap_good, None, y_good_train)
+    scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
+    scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
+    plt.savefig('good_test.pdf', format='pdf')
+
+    plot_dmap(dmap_bad, None, y_bad_train)
+    scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
+    scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias')
+    plt.savefig('bad_test.pdf', format='pdf')

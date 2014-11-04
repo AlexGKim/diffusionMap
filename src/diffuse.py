@@ -74,22 +74,25 @@ def nystrom(dmap, orig, d, sigma='default'):
     # Concatenate new data to training data
 
     data_concat = np.concatenate((orig, d))
+    n_samp, n_feat = data_concat.shape
+    data_concat = data_concat.reshape(n_samp, 1, n_feat)
+    data_concat_T = data_concat.reshape(1, n_samp, n_feat)
+
     
     # Compute one big distance matrix
     
-    distmat = np.sum((data_concat.T - data_concat)**2)
+    distmat = np.sum((data_concat_T - data_concat)**2, axis=2)
     
     # Slice off the part of the distance matrix that 
     # represents distances from new data to original data
     distmat_slice = distmat[len(orig):, :len(orig)]
+    
+    nr, nc = distmat_slice.shape
 
     # Shove into R
-
-    nr, nc = distmat_slice.shape
     xvec = robjects.FloatVector(distmat_slice.reshape(distmat_slice.size))
-    xr = robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
-
+    xr = robjects.r.matrix(xvec, nrow=nr, ncol=nc, byrow=True)
+    
     # Compute nystrom and return
-
-    coords = robjects.r.nystrom(xr, **kwargs)
+    coords = robjects.r.nystrom(dmap, xr, **kwargs)
     return coords

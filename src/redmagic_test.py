@@ -73,8 +73,10 @@ sdata = data[inds]
 bias = sdata['ZRED2'] - sdata['ZSPEC']
 
 # Get features for *entire* sample.
-# Absolute magnitudes are the only features I understand, so I use them.
-features = sdata['MABS']
+# Use G-R, R-I, I-Z colors and I absolute magnitude as features.
+features = list(sdata['MABS'][:-1] - sdata['MABS'][1:]) # colors
+features.append(sdata['MABS'][:, 2]) # i magnitude
+features = np.array(features)
 
 # Scale features
 scaler = StandardScaler()
@@ -93,11 +95,13 @@ td_bad = features[bad_inds]
 X_good_train, X_good_test, y_good_train, y_good_test = \
                                     train_test_split(td_good,
                                                      bias[good_inds],
-                                                     test_size=0.1)
+                                                     test_size=0.1,
+                                                     random_state=9)
 X_bad_train, X_bad_test, y_bad_train, y_bad_test = \
                                     train_test_split(td_bad,
                                                      bias[bad_inds],
-                                                     test_size=0.1)
+                                                     test_size=0.1,
+                                                     random_state=10)
 
 # Train diffusion maps
 dmap_good = diffuse.diffuse(X_good_train)
@@ -109,11 +113,11 @@ plot_dmap(dmap_bad, 'bad_init.pdf', y_bad_train)
 
 # Nystrom.
 
-goodtest_baddmap = diffuse.nystrom(dmap_bad, X_good_test)
-badtest_baddmap = diffuse.nystrom(dmap_bad, X_bad_test)
+goodtest_baddmap = diffuse.nystrom(dmap_bad, X_bad_train, X_good_test)
+badtest_baddmap = diffuse.nystrom(dmap_bad, X_bad_train, X_bad_test)
 
-goodtest_gooddmap = diffuse.nystrom(dmap_good, X_good_test)
-badtest_gooddmap = diffuse.nystrom(dmap_good, X_bad_test)
+goodtest_gooddmap = diffuse.nystrom(dmap_good, X_good_train, X_good_test)
+badtest_gooddmap = diffuse.nystrom(dmap_good, X_good_train, X_bad_test)
 
 plot_dmap(dmap_good, None, y_good_train)
 scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')

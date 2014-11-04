@@ -8,24 +8,7 @@ __all__ = ['diffuse', 'nystrom']
 
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
-
-def dist(d):
-    '''This function computes and returns the distance matrix computed by
-    using the specified distance measure to compute the distances
-    between the rows of a data matrix.
-
-    Parameters
-    ----------
-    d: numpy.ndarray with shape (n_samples, n_features).  n-by-m
-        feature matrix for a data set with n points and m features.
-    '''
-    nr, nc = d.shape
-
-    xvec = robjects.FloatVector(d.reshape(d.size))
-    xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
-    xr=robjects.r.dist(xr)
-
-    return xr
+import numpy as np
 
 def diffuse(d, **kwargs):
     '''Uses the pair-wise distance matrix for a data set to compute
@@ -45,11 +28,14 @@ def diffuse(d, **kwargs):
     '''
 
     dM=importr('diffusionMap')
-    xr = dist(d)
+    nr, nc = d.shape
+    xvec = robjects.FloatVector(d.reshape(d.size))
+    xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
+    xr=robjects.r.dist(xr)
     dmap = robjects.r.diffuse(xr, **kwargs)
     return dmap
 
-def nystrom(dmap, d, sigma='default'):
+def nystrom(dmap, orig, d, sigma='default'):
     '''Given the diffusion map coordinates of a training data set,
     estimates the diffusion map coordinates of a new set of data using
     the pairwise distance matrix from the new data to the original
@@ -60,8 +46,11 @@ def nystrom(dmap, d, sigma='default'):
   
     dmap: a dmap object from the original data set, computed by diffuse()
 
-    d: numpy.ndarray with shape (n_samples, n_features), where
+    d: numpy.ndarray with shape (n_new_samples, n_features), where
       n_features is the same as the training set to dmap
+
+    orig: feature array with shape (n_samples, n_features) that was
+      used to train the original dmap.
   
     sigma: 'default' or int: A scalar giving the size of the Nystrom
       extension kernel. Default uses the tuning parameter of the
@@ -79,8 +68,28 @@ def nystrom(dmap, d, sigma='default'):
     kwargs = {}
     if sigma != 'default':
         kwargs['sigma'] = sigma
-
+        
     dM=importr('diffusionMap')
-    xr = dist(d)
-    coords = robjects.r.nystrom(dmap, xr, **kwargs)
-    return coors
+    
+    # Concatenate new data to training data
+
+    data_concat = np.concatenate((orig, d))
+    
+    # Compute one big distance matrix
+    
+    distmat = np.sum((data_concat.T - data_concat)**2)
+    
+    # Slice off the part of the distance matrix that 
+    # represents distances from new data to original data
+    distmat_slice = distmat[len(orig):, :len(orig)]
+
+    # Shove into R
+
+    nr, nc = distmat_slice.shape
+    xvec = robjects.FloatVector(distmat_slice.reshape(distmat_slice.size))
+    xr = robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
+
+    # Compute nystrom and return
+
+    coords = robjects.r.nystrom(xr, **kwargs)
+    return coords

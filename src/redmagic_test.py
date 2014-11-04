@@ -50,11 +50,11 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
     '''
     plt.clf()
     coords = np.array(dmap.rx('X')[0])
-    plt.colorbar(label='bias')
     plt.xlabel('diffusion coordinate 1')
     plt.ylabel('diffusion coordinate 2')
     plt.title('RedMaGiC Diffusion Map: Absolute Magnitudes Only')
     scatter(coords, bias, marker='.')
+    plt.colorbar(label='bias')
     if nystrom and nystrombias:
         scatter(nystrom, nystrombias)
     if fname is not None:

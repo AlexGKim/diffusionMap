@@ -33,18 +33,20 @@ def diffuse(d, **kwargs):
 
     dM=importr('diffusionMap')
     xr=robjects.r.dist(d)
+
     # must be better way to do this but convert returned lower triangualr
     # array into an array
     xr_arr=np.zeros((d.shape[0],d.shape[0]))
-#    for i in xrange(0,d.shape[0]-1):
-#      for j in xrange(i+1,d.shape[0]):
-#        xr_arr[i,j]=xr[d.shape[0]*i - i*(i+1)/2 + j-i -1]
-#        xr_arr[j,i]=xr_arr[i,j]
+    for i in xrange(0,d.shape[0]-1):
+      for j in xrange(i+1,d.shape[0]):
+        xr_arr[i,j]=xr[d.shape[0]*i - i*(i+1)/2 + j-i -1]
+        xr_arr[j,i]=xr_arr[i,j]
     
-    import rpy2.robjects.conversion as conversion
-    print type(conversion.py2ri(xr_arr))
-#    shit
-#    dmap = dM.diffuse(xr_arr, **kwargs)
+    dmap = dM.diffuse(xr_arr, **kwargs)
+
+    # garbage collection
+    gc.collect()
+
     return dmap
 
 def nystrom(dmap, orig, d, sigma='default'):
@@ -98,13 +100,10 @@ def nystrom(dmap, orig, d, sigma='default'):
     # Slice off the part of the distance matrix that 
     # represents distances from new data to original data
     distmat_slice = distmat[len(orig):, :len(orig)]
-    
-    nr, nc = distmat_slice.shape
 
-    # Shove into R
-    xvec = robjects.FloatVector(distmat_slice.reshape(distmat_slice.size))
-    xr = robjects.r.matrix(xvec, nrow=nr, ncol=nc, byrow=True)
-    
     # Compute nystrom and return
-    coords = robjects.r.nystrom(dmap, xr, **kwargs)
+    coords = dM.nystrom(dmap, distmat_slice, **kwargs)
+
+    # python garbage collection
+    gc.collect()
     return coords

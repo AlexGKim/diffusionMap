@@ -113,8 +113,8 @@ if __name__ == '__main__':
 
     # Train diffusion maps
     if not ins.load:
-        dmap_good = diffuse.diffuse(X_good_train)
-        dmap_bad = diffuse.diffuse(X_bad_train)
+        dmap_good = diffuse.diffuse(X_good_train, t=1)
+        dmap_bad = diffuse.diffuse(X_bad_train, t=1)
 
     else:
         dmap_good = pickle.load(open('dmap_good.obj','rb'))

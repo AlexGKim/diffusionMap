@@ -8,7 +8,11 @@ __all__ = ['diffuse', 'nystrom']
 
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
+import rpy2.robjects.numpy2ri
+rpy2.robjects.numpy2ri.activate()
+import numpy
 import numpy as np
+import gc
 
 def diffuse(d, **kwargs):
     '''Uses the pair-wise distance matrix for a data set to compute
@@ -28,11 +32,19 @@ def diffuse(d, **kwargs):
     '''
 
     dM=importr('diffusionMap')
-    nr, nc = d.shape
-    xvec = robjects.FloatVector(d.reshape(d.size))
-    xr=robjects.r.matrix(xvec,nrow=nr,ncol=nc,byrow=True)
-    xr=robjects.r.dist(xr)
-    dmap = robjects.r.diffuse(xr, **kwargs)
+    xr=robjects.r.dist(d)
+    # must be better way to do this but convert returned lower triangualr
+    # array into an array
+    xr_arr=np.zeros((d.shape[0],d.shape[0]))
+#    for i in xrange(0,d.shape[0]-1):
+#      for j in xrange(i+1,d.shape[0]):
+#        xr_arr[i,j]=xr[d.shape[0]*i - i*(i+1)/2 + j-i -1]
+#        xr_arr[j,i]=xr_arr[i,j]
+    
+    import rpy2.robjects.conversion as conversion
+    print type(conversion.py2ri(xr_arr))
+#    shit
+#    dmap = dM.diffuse(xr_arr, **kwargs)
     return dmap
 
 def nystrom(dmap, orig, d, sigma='default'):

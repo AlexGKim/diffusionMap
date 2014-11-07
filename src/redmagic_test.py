@@ -29,7 +29,6 @@ def scatter(X, bias, marker='+', label=None):
     
     marker: the marker to use on the figure.
     '''
-
     plt.scatter(X.T[0], X.T[1], c=bias,
                 vmin=-.1, vmax=.1,
                 cmap=plt.matplotlib.cm.jet, 
@@ -65,10 +64,13 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
 if __name__ == '__main__':
 
     parser = ArgumentParser()
+    parser.add_argument('t', help='steps taken in diffusion process')
+    parser.add_argument('eps.val', help='steps taken in diffusion process')
     parser.add_argument('--save', action='store_true', help='Pickle trained diffusion maps.')
     parser.add_argument('--load', action='store_true', help='Load trained diffusion maps from pickles.')
     
     ins = parser.parse_args()
+    pdict=vars(ins)
 
     # Load training data
     f = pyfits.open('../data/stripe82_run_redmagic-1.0-08.fits')
@@ -113,8 +115,9 @@ if __name__ == '__main__':
 
     # Train diffusion maps
     if not ins.load:
-        dmap_good = diffuse.diffuse(X_good_train, t=1)
-        dmap_bad = diffuse.diffuse(X_bad_train, t=1)
+        kwargs = dict([(i,float(pdict[i])) for i in ['t','eps.val'] if i in pdict])
+        dmap_good = diffuse.diffuse(X_good_train, **kwargs)
+        dmap_bad = diffuse.diffuse(X_bad_train, **kwargs)
 
     else:
         dmap_good = pickle.load(open('dmap_good.obj','rb'))
@@ -125,9 +128,11 @@ if __name__ == '__main__':
         pickle.dump(dmap_good, open('dmap_good.obj','wb'))
         pickle.dump(dmap_bad, open('dmap_bad.obj','wb'))
 
+    
+
     # Plot results for good and bad sets.
-    plot_dmap(dmap_good, 'good_init.pdf', y_good_train)
-    plot_dmap(dmap_bad, 'bad_init.pdf', y_bad_train)
+    plot_dmap(dmap_good, 'good_init.'+pdict['eps.val']+'.pdf', y_good_train)
+    plot_dmap(dmap_bad, 'bad_init.'+pdict['eps.val']+'.pdf', y_bad_train)
 
     # Nystrom.
 
@@ -140,9 +145,9 @@ if __name__ == '__main__':
     plot_dmap(dmap_good, None, y_good_train)
     scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
     scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
-    plt.savefig('good_test.pdf', format='pdf')
+    plt.savefig('good_test.'+pdict['eps.val']+'.pdf', format='pdf')
 
     plot_dmap(dmap_bad, None, y_bad_train)
     scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
     scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias')
-    plt.savefig('bad_test.pdf', format='pdf')
+    plt.savefig('bad_test.'+pdict['eps.val']+'.pdf', format='pdf')

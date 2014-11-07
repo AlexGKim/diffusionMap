@@ -41,9 +41,8 @@ def diffuse(d, **kwargs):
       for j in xrange(i+1,d.shape[0]):
         xr_arr[i,j]=xr[d.shape[0]*i - i*(i+1)/2 + j-i -1]
         xr_arr[j,i]=xr_arr[i,j]
-    
     dmap = dM.diffuse(xr_arr, **kwargs)
-
+    
     # garbage collection
     gc.collect()
 

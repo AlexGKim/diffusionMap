@@ -51,6 +51,7 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
     '''
     plt.clf()
     coords = np.array(dmap.rx('X')[0])
+    coords = dmap['X']
     plt.xlabel('diffusion coordinate 1')
     plt.ylabel('diffusion coordinate 2')
     plt.title('RedMaGiC Diffusion Map: Absolute Magnitudes Only')
@@ -78,28 +79,29 @@ if __name__ == '__main__':
     from matplotlib.backends.backend_pdf import PdfPages
     pp = PdfPages('spiral2.pdf')
     plt.clf()
-    plt.scatter(data[0:Norig,0],data[0:Norig,1],marker='D',c='b')
-    plt.scatter(data[Norig:,0],data[Norig:,1],marker='^',c='r')
+    plt.scatter(data[0:Norig,0],data[0:Norig,1],marker='D',c=t[0:Norig], cmap=plt.cm.hsv)
+    plt.scatter(data[Norig:,0],data[Norig:,1],marker='^',c=t[Norig:], cmap=plt.cm.hsv)
     plt.savefig(pp,format='pdf')
     from mpl_toolkits.mplot3d import Axes3D
 
     ts =[1]
-    for t in ts:
+    for tt in ts:
       plt.clf()
     # Train diffusion maps
-      dmap = diffuse.diffuse(data[0:Norig,:], t=1)
+      dmap = diffuse.diffuse(data[0:Norig,:], t=tt)
 
     # Nystrom
       train = np.array(diffuse.nystrom(dmap, data[0:Norig,:], data[Norig:,:]))
       fig = plt.figure()
       ax = fig.add_subplot(111)
-      X=np.array(dmap.rx('X')[0])
-      ax.scatter(X.T[0],X.T[1],marker='D',c='b')
+      #X=np.array(dmap.rx('X')[0])
+      X=dmap['X']
+      ax.scatter(X.T[0],X.T[1],marker='D',c=t[0:Norig], cmap=plt.cm.hsv)
       X=train
-      ax.scatter(X.T[0],X.T[1],marker='^',c='r')
+      ax.scatter(X.T[0],X.T[1],marker='^',c=t[Norig:], cmap=plt.cm.hsv)
       ax.set_xlabel('X[0]')
       ax.set_ylabel('X[1]')
-      ax.set_title('t='+str(t))
+      ax.set_title('t='+str(tt))
       plt.savefig(pp, format='pdf')
       #train_ = np.array(diffuse.nystrom_(dmap, data[0:Norig,:], data[Norig:,:]))
       #plt.clf() 

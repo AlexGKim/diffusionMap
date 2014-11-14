@@ -39,13 +39,6 @@ def diffuse(d, **kwargs):
     #xr=numpy.array(robjects.r.dist(d))
     # Python distance
     xr = scipy.spatial.distance.pdist(d, 'euclidean')
-#    file = open('dist.txt','w')
-#    for x in xr:
-#      file.write(str(x)+'\n')
-#    file.close()
-#    print d.shape, xr.shape
-#    fwf
-#    print 'distance',xr.min(),xr.max()
     xr_arr=scipy.spatial.distance.squareform(xr)
     #kwargs['eps.val']=2*numpy.sort(xr)[10]**2 #dM.epsilonCompute(xr_arr,p=5e-3)[0]
 #    kwargs['eps_val']=dM.epsilonCompute(xr_arr,p=5e-3)[0]
@@ -60,7 +53,7 @@ def diffuse(d, **kwargs):
 #    print 'R', numpy.amin(dmap.rx('phi')[0]), numpy.amax(dmap.rx('phi')[0])
 #    print 'R', numpy.amin(dmap.rx('X')[0]), numpy.amax(dmap.rx('X')[0])
     dmap = diffuse_py(xr_arr, **kwargs)
-    print dmap['X'].min(), dmap['X'].min()
+#    print dmap['X'].min(), dmap['X'].min()
     # garbage collection
     gc.collect()
 
@@ -118,9 +111,9 @@ def nystrom(dmap, orig, d, sigma='default'):
     # Compute nystrom and return
 
     # R version
-    coords = dM.nystrom(dmap, distmat_slice, **kwargs)
+    #coords = dM.nystrom(dmap, distmat_slice, **kwargs)
     # Python version
-    #coords = nystrom_py(dmap, distmat_slice, **kwargs)
+    coords = nystrom_py(dmap, distmat_slice, **kwargs)
 
     # python garbage collection
     gc.collect()
@@ -129,11 +122,14 @@ def nystrom(dmap, orig, d, sigma='default'):
 def nystrom_py(dmap, Dnew, **kwargs):
 
     Nnew, Nold  =  Dnew.shape
-    eigenvals=numpy.array(dmap.rx('eigenvals')[0])
-    X=numpy.array(dmap.rx('X')[0])
+#    eigenvals=numpy.array(dmap.rx('eigenvals')[0])
+    eigenvals=dmap['eigenvals']
+#    X=numpy.array(dmap.rx('X')[0])
+    X=dmap['X']
+    print X.shape, eigenvals.shape
 #    print X.shape (ndata, ndim)
-    sigma=dmap.rx('epsilon')[0]
-
+#    sigma=dmap.rx('epsilon')[0]
+    sigma=dmap['epsilon']
     if Nold != X.shape[0]:
       print "dimensions don't match"
 
@@ -211,30 +207,31 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5):
   evals, evecs = eigsh(Asp, k=neff, which='LA', ncv=numpy.maximum(30,2*neff))
 #  evecs= numpy.array([[1.,4,7],[2,5,8],[3,6,9],[5,10,15]]) 
   #evecs = matrix(c(1,2,3,5,4,5,6,10,7,8,9,15),nrow=4,ncol=3)
+#  for i in xrange(neff):
+#    print evals[neff-1],evecs[:,neff-1]
   psi = evecs[:,neff-1::-1]/numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
   phi = evecs[:,neff-1::-1]*numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
 
-  eigenvals = evals[neff::-1]#eigenvalues
+  eigenvals = evals[neff-1::-1]#eigenvalues
 
   if t<=0:
     lambd = eigenvals[1:]/(1-eigenvals[1:])
     lambd= numpy.outer(numpy.zeros(n)+1., lambd)
     if neigen is None:
       lam=lambd[0,:]/lambd[0,0]
-      neigen= numpy.sum(lam < 0.05)
+      neigen= numpy.amax(numpy.where(lam > 0.05))+1
       neigen = numpy.minimum(neigen,maxdim)
-      eigenvals = eigenvals[0:neigen]
+      eigenvals = eigenvals[0:neigen+1]
     X = psi[:,1:neigen+1]*lambd[:,0:neigen]
   else:
     lambd= eigenvals[1:]**t
     lambd=numpy.outer(numpy.zeros(n)+1., lambd)
     if neigen is None:
       lam=lambd[0,:]/lambd[0,0]
-      neigen= numpy.sum(lam < 0.05)
+      neigen= numpy.amax(numpy.where(lam > 0.05))+1
       neigen = numpy.minimum(neigen,maxdim)
-      eigenvals = eigenvals[0:neigen]
+      eigenvals = eigenvals[0:neigen+1]
     X = psi[:,1:neigen+1]*lambd[:,0:neigen]
-
   y=dict()
   y['X']=X
   y['phi0']=phi[:,0]

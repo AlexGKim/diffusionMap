@@ -49,7 +49,7 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
       testing data. 
     '''
     plt.clf()
-    coords = np.array(dmap.rx('X')[0])
+    coords=dmap['X']
     plt.xlabel('diffusion coordinate 1')
     plt.ylabel('diffusion coordinate 2')
     plt.title('RedMaGiC Diffusion Map: Absolute Magnitudes Only')
@@ -64,8 +64,7 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
 if __name__ == '__main__':
 
     parser = ArgumentParser()
-    parser.add_argument('t', help='steps taken in diffusion process')
-    parser.add_argument('eps.val', help='steps taken in diffusion process')
+    parser.add_argument('-eps.val', help='steps taken in diffusion process',default='default')
     parser.add_argument('--save', action='store_true', help='Pickle trained diffusion maps.')
     parser.add_argument('--load', action='store_true', help='Load trained diffusion maps from pickles.')
     
@@ -115,7 +114,10 @@ if __name__ == '__main__':
 
     # Train diffusion maps
     if not ins.load:
-        kwargs = dict([(i,float(pdict[i])) for i in ['t','eps.val'] if i in pdict])
+        kwargs=dict()
+        if pdict['eps.val'] != 'default':
+           kwargs['eps.val'] = float(pdict['eps.val'])
+        kwargs['t']=1
         dmap_good = diffuse.diffuse(X_good_train, **kwargs)
         dmap_bad = diffuse.diffuse(X_bad_train, **kwargs)
 
@@ -141,13 +143,34 @@ if __name__ == '__main__':
 
     goodtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_good_test))
     badtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_bad_test))
+#    plot_dmap(dmap_good, None, y_good_train)
+    plt.clf()
+#    scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
+#    scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias',size=20)
 
-    plot_dmap(dmap_good, None, y_good_train)
-    scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
-    scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
+    from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    X=goodtest_gooddmap
+    ax.scatter(X.T[0],X.T[1],X.T[2],marker='D',c='b')
+    X=badtest_gooddmap
+    ax.scatter(X.T[0],X.T[1],X.T[2],marker='^',c='r')
+    ax.set_xlabel('X[0]')
+    ax.set_ylabel('X[1]')
+    ax.set_zlabel('X[2]')
     plt.savefig('good_test.'+pdict['eps.val']+'.pdf', format='pdf')
 
-    plot_dmap(dmap_bad, None, y_bad_train)
-    scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
-    scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias')
+    plt.clf()
+    fig=plt.figure()
+#    plot_dmap(dmap_bad, None, y_bad_train)
+#    scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
+#    scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias',size=20)
+    ax = fig.add_subplot(111, projection='3d')
+    X=goodtest_baddmap
+    ax.scatter(X.T[0],X.T[1],X.T[2],marker='D',c='b')
+    X=badtest_baddmap
+    ax.scatter(X.T[0],X.T[1],X.T[2],marker='^',c='r')
+    ax.set_xlabel('X[0]')
+    ax.set_ylabel('X[1]')
+    ax.set_zlabel('X[2]')
     plt.savefig('bad_test.'+pdict['eps.val']+'.pdf', format='pdf')

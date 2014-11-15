@@ -162,18 +162,24 @@ if __name__ == '__main__':
     ax.set_xlabel('X[0]')
     ax.set_ylabel('X[1]')
     ax.set_zlabel('X[2]')
-#    ar = numpy.append(goodtest_gooddmap.T[0],badtest_gooddmap.T[0])
-#    mn = numpy.mean(ar)
-#    sd = numpy.std(ar)
-#    ax.set_xlim((mn-5*sd,mn+5*sd))
-#    ar = numpy.append(goodtest_gooddmap.T[1],badtest_gooddmap.T[1])
-#    mn = numpy.mean(ar)
-#    sd = numpy.std(ar)
-#    ax.set_ylim((mn-5*sd,mn+5*sd))
-#    ar = numpy.append(goodtest_gooddmap.T[2],badtest_gooddmap.T[2])
-#    mn = numpy.mean(ar)
-#    sd = numpy.std(ar)
-#    ax.set_zlim((mn-5*sd,mn+5*sd))
+    ar = numpy.append(goodtest_gooddmap.T[0],badtest_gooddmap.T[0])
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
+    sd = numpy.std(ar)
+    ax.set_xlim((mn-6*sd,mn+6*sd))
+    ar = numpy.append(goodtest_gooddmap.T[1],badtest_gooddmap.T[1])
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
+    sd = numpy.std(ar)
+    ax.set_ylim((mn-6*sd,mn+6*sd))
+    ar = numpy.append(goodtest_gooddmap.T[2],badtest_gooddmap.T[2])
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
+    sd = numpy.std(ar)
+    ax.set_zlim((mn-6*sd,mn+6*sd))
     plt.savefig('good_test.'+pdict['eps_val']+'.pdf', format='pdf')
 
     plt.clf()
@@ -192,19 +198,22 @@ if __name__ == '__main__':
     ax.set_ylabel('X[1]')
     ax.set_zlabel('X[2]')
 
-    ar = numpy.sort(numpy.append(goodtest_baddmap.T[0],badtest_baddmap.T[0]))[20:-20]
-    mn = numpy.mean(ar)
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[0],badtest_baddmap.T[0]))
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
     sd = numpy.std(ar)
-    print (mn-5*sd,mn+5*sd)
-    ax.set_xlim((mn-5*sd,mn+5*sd))
-    ar = numpy.sort(numpy.append(goodtest_baddmap.T[1],badtest_baddmap.T[1]))[20:-20]
-    mn = numpy.mean(ar)
+    ax.set_xlim((mn-6*sd,mn+6*sd))
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[1],badtest_baddmap.T[1]))
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
     sd = numpy.std(ar)
-    print (mn-5*sd,mn+5*sd)
-    ax.set_ylim((mn-5*sd,mn+5*sd))
-    ar = numpy.sort(numpy.append(goodtest_baddmap.T[2],badtest_baddmap.T[2]))[20:-20]
-    mn = numpy.mean(ar)
+    ax.set_ylim((mn-6*sd,mn+6*sd))
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[2],badtest_baddmap.T[2]))
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
     sd = numpy.std(ar)
-    print (mn-5*sd,mn+5*sd)
-    ax.set_zlim((mn-5*sd,mn+5*sd))
+    ax.set_zlim((mn-6*sd,mn+6*sd))
     plt.savefig('bad_test.'+pdict['eps_val']+'.pdf', format='pdf')

@@ -6,16 +6,17 @@ __author__ = 'Alex Kim <agkim@lbl.gov>'
 __contributors__ = ['Danny Goldstein <dgold@berkeley.edu>']
 __all__ = ['diffuse', 'nystrom']
 
-import rpy2.robjects as robjects
-from rpy2.robjects.packages import importr
-import rpy2.robjects.numpy2ri
-rpy2.robjects.numpy2ri.activate()
+#import rpy2.robjects as robjects
+#from rpy2.robjects.packages import importr
+#import rpy2.robjects.numpy2ri
+#rpy2.robjects.numpy2ri.activate()
+#import gc
 import numpy
 import numpy as np
-import gc
 import scipy
 from scipy.stats import norm
 from scipy.sparse import *
+from scipy.sparse.linalg import eigsh
 
 def diffuse(d, **kwargs):
     '''Uses the pair-wise distance matrix for a data set to compute
@@ -33,29 +34,15 @@ def diffuse(d, **kwargs):
     rpy2.robjects.r.dmap object containing the diffusion map
         coefficients for each sample.
     '''
-    dM=importr('diffusionMap')
-
+#   dM=importr('diffusionMap')
     # R distance
     #xr=numpy.array(robjects.r.dist(d))
     # Python distance
     xr = scipy.spatial.distance.pdist(d, 'euclidean')
     xr_arr=scipy.spatial.distance.squareform(xr)
-    #kwargs['eps.val']=2*numpy.sort(xr)[10]**2 #dM.epsilonCompute(xr_arr,p=5e-3)[0]
-#    kwargs['eps_val']=dM.epsilonCompute(xr_arr,p=5e-3)[0]
-#    kwargs['neigen']=10
-#    kwargs['maxdim']=100
-#    kwargs['t']=0
-#    print kwargs
  
 #    dmap = dM.diffuse(xr_arr, **kwargs)
-#    print 'R', numpy.amin(dmap.rx('eigenvals')[0]), numpy.amax(dmap.rx('eigenvals')[0])
-#    print 'R', numpy.amin(dmap.rx('psi')[0]), numpy.amax(dmap.rx('psi')[0])
-#    print 'R', numpy.amin(dmap.rx('phi')[0]), numpy.amax(dmap.rx('phi')[0])
-#    print 'R', numpy.amin(dmap.rx('X')[0]), numpy.amax(dmap.rx('X')[0])
     dmap = diffuse_py(xr_arr, **kwargs)
-#    print dmap['X'].min(), dmap['X'].min()
-    # garbage collection
-    gc.collect()
 
     return dmap
 
@@ -92,18 +79,19 @@ def nystrom(dmap, orig, d, sigma='default'):
     kwargs = {}
     if sigma != 'default':
         kwargs['sigma'] = sigma
-    dM=importr('diffusionMap')
+    #dM=importr('diffusionMap')
     
     # Concatenate new data to training data
 
     data_concat = np.concatenate((orig, d))
     n_samp, n_feat = data_concat.shape
     data_concat = data_concat.reshape(n_samp, 1, n_feat)
-    data_concat_T = data_concat.reshape(1, n_samp, n_feat)
+#    data_concat_T = data_concat.reshape(1, n_samp, n_feat)
 
     # Compute one big distance matrix
-    
-    distmat = np.sum((data_concat_T - data_concat)**2, axis=2)
+    xr = scipy.spatial.distance.pdist(data_concat[:,0,:], 'euclidean')
+    distmat = scipy.spatial.distance.squareform(xr)    
+#    distmat = np.sum((data_concat_T - data_concat)**2, axis=2)
     
     # Slice off the part of the distance matrix that 
     # represents distances from new data to original data
@@ -115,8 +103,6 @@ def nystrom(dmap, orig, d, sigma='default'):
     # Python version
     coords = nystrom_py(dmap, distmat_slice, **kwargs)
 
-    # python garbage collection
-    gc.collect()
     return coords
 
 def nystrom_py(dmap, Dnew, **kwargs):
@@ -126,39 +112,24 @@ def nystrom_py(dmap, Dnew, **kwargs):
     eigenvals=dmap['eigenvals']
 #    X=numpy.array(dmap.rx('X')[0])
     X=dmap['X']
-    print X.shape, eigenvals.shape
-#    print X.shape (ndata, ndim)
 #    sigma=dmap.rx('epsilon')[0]
     sigma=dmap['epsilon']
     if Nold != X.shape[0]:
       print "dimensions don't match"
-
     Xnew = numpy.exp(-Dnew**2/sigma)
-#    print 'Xnew',Xnew.shape,numpy.amin(Xnew), numpy.amax(Xnew)
-#    rXnew=numpy.array(Xnew)
     v = numpy.sum(Xnew,axis=1)
-#    import sys
-#    w=numpy.array(numpy.where(v > 10*sys.float_info.epsilon))
-#    w=w[0,:]
-#    print numpy.amin(v), numpy.amax(v)
+
+    #some points are far away from the training set
+    w = numpy.where(v !=0)
+    bw = numpy.where( v==0)
     for i in xrange(Xnew.shape[1]):
-      Xnew[:,i]=Xnew[:,i]/v
-#    print 'Xnew',Xnew.shape,numpy.amin(Xnew), numpy.amax(Xnew)
-#    Xnew_w= Xnew[w,:]
-#    print 'Xnew_w', Xnew_w.shape,Xnew_w
-#    emat=numpy.zeros((eigenvals.shape[0],eigenvals.shape[0]))
-#    numpy.fill_diagonal(emat,1/eigenvals)
-#    dum = numpy.dot(X,emat)
+      #Xnew[:,i]=Xnew[:,i]/v
+      Xnew[w,i]=Xnew[w,i]/v[w]
     dum = numpy.array(X)
     for i in xrange(X.shape[1]):
-#      print 1/eigenvals[i]
-#      print X[:,i]
       dum[:,i]=X[:,i]/eigenvals[i]
-#    print 'first dot',dum.shape, dum, numpy.amin(dum), numpy.amax(dum)
-#    Xnew = numpy.dot(Xnew ,numpy.dot( X , emat))
     Xnew = numpy.dot(Xnew ,dum)
-#    print 'Xnew', Xnew.shape, Xnew
-#    Xnew_w = numpy.dot(Xnew_w ,numpy.dot( X , emat))
+    Xnew[bw,:]=numpy.nan
     return Xnew
 
 def epsilonCompute(D, p=0.01):
@@ -171,21 +142,7 @@ def epsilonCompute(D, p=0.01):
    dist_knn = D_sort[k,:]
    epsilon = 2*numpy.median(dist_knn)**2
    return epsilon
-#epsilonCompute <- function(D,p=.01){
 
-#  D = as.matrix(D)
-#  n = dim(D)[1]
-#  k = ceiling(p*n)
-#  k = ifelse(k<2,2,k) # use k of at least 2
-#  D.sort = apply(D,1,sort)
-#  dist.knn = D.sort[(k+1),] # find dists. to kth nearest neighbor
-#  epsilon = 2*median(dist.knn)^2
-#
-#  return(epsilon)
-#}
-
-
-#diffuse <- function(D,eps.val=epsilonCompute(D),neigen=NULL,t=0,maxdim=50,delta=10^-5) {
 def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5):
   if eps_val == 'default':
     eps_val = epsilonCompute(D)
@@ -195,20 +152,17 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5):
   v = numpy.sqrt(numpy.sum(K,axis=0))
   
   A= K / numpy.outer(v,v)
+  del K
   w=numpy.where(A > delta)
   Asp =  csc_matrix( (A[w],(w[0],w[1])), shape=A.shape )
-
+  del A
   if neigen is None:
     neff = numpy.minimum(maxdim,n)
   else:
     neff =  numpy.minimum(neigen, n)
+  neff=neff.item() #convert numpy int to int
 
-  from scipy.sparse.linalg import eigsh
-  evals, evecs = eigsh(Asp, k=neff, which='LA', ncv=numpy.maximum(30,2*neff))
-#  evecs= numpy.array([[1.,4,7],[2,5,8],[3,6,9],[5,10,15]]) 
-  #evecs = matrix(c(1,2,3,5,4,5,6,10,7,8,9,15),nrow=4,ncol=3)
-#  for i in xrange(neff):
-#    print evals[neff-1],evecs[:,neff-1]
+  evals, evecs = eigsh(Asp, k=neff, which='LA', ncv=numpy.maximum(30,2*neff) )
   psi = evecs[:,neff-1::-1]/numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
   phi = evecs[:,neff-1::-1]*numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
 
@@ -241,5 +195,4 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5):
   y['phi']=phi
   y['neigen']=neigen
   y['epsilon']=eps_val
-
   return y

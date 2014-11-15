@@ -103,17 +103,5 @@ if __name__ == '__main__':
       ax.set_ylabel('X[1]')
       ax.set_title('t='+str(tt))
       plt.savefig(pp, format='pdf')
-      #train_ = np.array(diffuse.nystrom_(dmap, data[0:Norig,:], data[Norig:,:]))
-      #plt.clf() 
-      #fig = plt.figure()
-      #ax = fig.add_subplot(111)
-      #X=np.array(dmap.rx('X')[0])
-      #ax.scatter(X.T[0],X.T[1],marker='D',c='b')
-      #X=train_
-      #ax.scatter(X.T[0],X.T[1],marker='^',c='r')
-      #ax.set_xlabel('X[0]')
-      #ax.set_ylabel('X[1]')
-      #ax.set_title('t='+str(t))
-      #plt.savefig(pp, format='pdf')
     
     pp.close()

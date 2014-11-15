@@ -13,6 +13,7 @@ from sklearn.cross_validation import train_test_split
 import matplotlib
 matplotlib.use('Agg')
 import numpy as np
+import numpy
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 
@@ -64,7 +65,7 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
 if __name__ == '__main__':
 
     parser = ArgumentParser()
-    parser.add_argument('-eps.val', help='steps taken in diffusion process',default='default')
+    parser.add_argument('-eps_val', help='steps taken in diffusion process',default='default')
     parser.add_argument('--save', action='store_true', help='Pickle trained diffusion maps.')
     parser.add_argument('--load', action='store_true', help='Load trained diffusion maps from pickles.')
     
@@ -115,8 +116,9 @@ if __name__ == '__main__':
     # Train diffusion maps
     if not ins.load:
         kwargs=dict()
-        if pdict['eps.val'] != 'default':
-           kwargs['eps.val'] = float(pdict['eps.val'])
+        kwargs['delta']=1e-8
+        if pdict['eps_val'] != 'default':
+           kwargs['eps_val'] = float(pdict['eps_val'])
         kwargs['t']=1
         dmap_good = diffuse.diffuse(X_good_train, **kwargs)
         dmap_bad = diffuse.diffuse(X_bad_train, **kwargs)
@@ -133,8 +135,8 @@ if __name__ == '__main__':
     
 
     # Plot results for good and bad sets.
-    plot_dmap(dmap_good, 'good_init.'+pdict['eps.val']+'.pdf', y_good_train)
-    plot_dmap(dmap_bad, 'bad_init.'+pdict['eps.val']+'.pdf', y_bad_train)
+    plot_dmap(dmap_good, 'good_init.'+pdict['eps_val']+'.pdf', y_good_train)
+    plot_dmap(dmap_bad, 'bad_init.'+pdict['eps_val']+'.pdf', y_bad_train)
 
     # Nystrom.
 
@@ -146,8 +148,10 @@ if __name__ == '__main__':
 #    plot_dmap(dmap_good, None, y_good_train)
     plt.clf()
 #    scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
-#    scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias',size=20)
+#    scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
 
+#    plt.show()
+#    plt.clf()
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -158,13 +162,27 @@ if __name__ == '__main__':
     ax.set_xlabel('X[0]')
     ax.set_ylabel('X[1]')
     ax.set_zlabel('X[2]')
-    plt.savefig('good_test.'+pdict['eps.val']+'.pdf', format='pdf')
+#    ar = numpy.append(goodtest_gooddmap.T[0],badtest_gooddmap.T[0])
+#    mn = numpy.mean(ar)
+#    sd = numpy.std(ar)
+#    ax.set_xlim((mn-5*sd,mn+5*sd))
+#    ar = numpy.append(goodtest_gooddmap.T[1],badtest_gooddmap.T[1])
+#    mn = numpy.mean(ar)
+#    sd = numpy.std(ar)
+#    ax.set_ylim((mn-5*sd,mn+5*sd))
+#    ar = numpy.append(goodtest_gooddmap.T[2],badtest_gooddmap.T[2])
+#    mn = numpy.mean(ar)
+#    sd = numpy.std(ar)
+#    ax.set_zlim((mn-5*sd,mn+5*sd))
+    plt.savefig('good_test.'+pdict['eps_val']+'.pdf', format='pdf')
 
     plt.clf()
     fig=plt.figure()
 #    plot_dmap(dmap_bad, None, y_bad_train)
 #    scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
-#    scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias',size=20)
+#    scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias')
+#    plt.show()
+#    plt.clf()
     ax = fig.add_subplot(111, projection='3d')
     X=goodtest_baddmap
     ax.scatter(X.T[0],X.T[1],X.T[2],marker='D',c='b')
@@ -173,4 +191,20 @@ if __name__ == '__main__':
     ax.set_xlabel('X[0]')
     ax.set_ylabel('X[1]')
     ax.set_zlabel('X[2]')
-    plt.savefig('bad_test.'+pdict['eps.val']+'.pdf', format='pdf')
+
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[0],badtest_baddmap.T[0]))[20:-20]
+    mn = numpy.mean(ar)
+    sd = numpy.std(ar)
+    print (mn-5*sd,mn+5*sd)
+    ax.set_xlim((mn-5*sd,mn+5*sd))
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[1],badtest_baddmap.T[1]))[20:-20]
+    mn = numpy.mean(ar)
+    sd = numpy.std(ar)
+    print (mn-5*sd,mn+5*sd)
+    ax.set_ylim((mn-5*sd,mn+5*sd))
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[2],badtest_baddmap.T[2]))[20:-20]
+    mn = numpy.mean(ar)
+    sd = numpy.std(ar)
+    print (mn-5*sd,mn+5*sd)
+    ax.set_zlim((mn-5*sd,mn+5*sd))
+    plt.savefig('bad_test.'+pdict['eps_val']+'.pdf', format='pdf')

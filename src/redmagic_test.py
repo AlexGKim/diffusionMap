@@ -16,7 +16,40 @@ import numpy as np
 import numpy
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
+from mpl_toolkits.mplot3d import Axes3D
 
+def scatter_3d(goodtest_baddmap,badtest_baddmap):
+    plt.clf()
+    fig=plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    X=goodtest_baddmap
+    ax.scatter(X.T[0],X.T[1],X.T[2],marker='D',c='b')
+    X=badtest_baddmap
+    ax.scatter(X.T[0],X.T[1],X.T[2],marker='^',c='r')
+    ax.set_xlabel('X[0]')
+    ax.set_ylabel('X[1]')
+    ax.set_zlabel('X[2]')
+
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[0],badtest_baddmap.T[0]))
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
+    sd = numpy.std(ar)
+    ax.set_xlim((mn-6*sd,mn+6*sd))
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[1],badtest_baddmap.T[1]))
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
+    sd = numpy.std(ar)
+    ax.set_ylim((mn-6*sd,mn+6*sd))
+    ar = numpy.sort(numpy.append(goodtest_baddmap.T[2],badtest_baddmap.T[2]))
+    nclip=numpy.ceil(0.05*ar.shape[0])
+    ar=ar[nclip:-nclip]
+    mn = ar[len(ar)/2]
+    sd = numpy.std(ar)
+    ax.set_zlim((mn-6*sd,mn+6*sd))
+    plt.savefig('bad_test.'+pdict['eps_val']+'.pdf', format='pdf')
+  
 def scatter(X, bias, marker='+', label=None):
     '''Add a scatter plot to the current figure. 
     
@@ -141,79 +174,26 @@ if __name__ == '__main__':
     # Nystrom.
 
     goodtest_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_good_test))
+    goodtrain_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_good_train))
+    badtrain_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_bad_train))
     badtest_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_bad_test))
 
     goodtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_good_test))
     badtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_bad_test))
+    badtrain_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_bad_train))
+    goodtrain_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_good_train))
+
+    scatter_3d(goodtrain_baddmap,badtrain_baddmap)
+    plt.savefig('good_train.'+pdict['eps_val']+'.pdf', format='pdf')
+
+    scatter_3d(goodtrain_gooddmap,badtrain_gooddmap)
+    plt.savefig('bad_train.'+pdict['eps_val']+'.pdf', format='pdf')
+
 #    plot_dmap(dmap_good, None, y_good_train)
-    plt.clf()
+    scatter_3d(goodtest_gooddmap,badtest_gooddmap)
+    plt.savefig('good_test.'+pdict['eps_val']+'.pdf', format='pdf')
 #    scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
 #    scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
 
-#    plt.show()
-#    plt.clf()
-    from mpl_toolkits.mplot3d import Axes3D
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    X=goodtest_gooddmap
-    ax.scatter(X.T[0],X.T[1],X.T[2],marker='D',c='b')
-    X=badtest_gooddmap
-    ax.scatter(X.T[0],X.T[1],X.T[2],marker='^',c='r')
-    ax.set_xlabel('X[0]')
-    ax.set_ylabel('X[1]')
-    ax.set_zlabel('X[2]')
-    ar = numpy.append(goodtest_gooddmap.T[0],badtest_gooddmap.T[0])
-    nclip=numpy.ceil(0.05*ar.shape[0])
-    ar=ar[nclip:-nclip]
-    mn = ar[len(ar)/2]
-    sd = numpy.std(ar)
-    ax.set_xlim((mn-6*sd,mn+6*sd))
-    ar = numpy.append(goodtest_gooddmap.T[1],badtest_gooddmap.T[1])
-    nclip=numpy.ceil(0.05*ar.shape[0])
-    ar=ar[nclip:-nclip]
-    mn = ar[len(ar)/2]
-    sd = numpy.std(ar)
-    ax.set_ylim((mn-6*sd,mn+6*sd))
-    ar = numpy.append(goodtest_gooddmap.T[2],badtest_gooddmap.T[2])
-    nclip=numpy.ceil(0.05*ar.shape[0])
-    ar=ar[nclip:-nclip]
-    mn = ar[len(ar)/2]
-    sd = numpy.std(ar)
-    ax.set_zlim((mn-6*sd,mn+6*sd))
-    plt.savefig('good_test.'+pdict['eps_val']+'.pdf', format='pdf')
-
-    plt.clf()
-    fig=plt.figure()
-#    plot_dmap(dmap_bad, None, y_bad_train)
-#    scatter(goodtest_baddmap, y_good_test, marker='+', label='low bias')
-#    scatter(badtest_baddmap, y_bad_test, marker='^', label='high bias')
-#    plt.show()
-#    plt.clf()
-    ax = fig.add_subplot(111, projection='3d')
-    X=goodtest_baddmap
-    ax.scatter(X.T[0],X.T[1],X.T[2],marker='D',c='b')
-    X=badtest_baddmap
-    ax.scatter(X.T[0],X.T[1],X.T[2],marker='^',c='r')
-    ax.set_xlabel('X[0]')
-    ax.set_ylabel('X[1]')
-    ax.set_zlabel('X[2]')
-
-    ar = numpy.sort(numpy.append(goodtest_baddmap.T[0],badtest_baddmap.T[0]))
-    nclip=numpy.ceil(0.05*ar.shape[0])
-    ar=ar[nclip:-nclip]
-    mn = ar[len(ar)/2]
-    sd = numpy.std(ar)
-    ax.set_xlim((mn-6*sd,mn+6*sd))
-    ar = numpy.sort(numpy.append(goodtest_baddmap.T[1],badtest_baddmap.T[1]))
-    nclip=numpy.ceil(0.05*ar.shape[0])
-    ar=ar[nclip:-nclip]
-    mn = ar[len(ar)/2]
-    sd = numpy.std(ar)
-    ax.set_ylim((mn-6*sd,mn+6*sd))
-    ar = numpy.sort(numpy.append(goodtest_baddmap.T[2],badtest_baddmap.T[2]))
-    nclip=numpy.ceil(0.05*ar.shape[0])
-    ar=ar[nclip:-nclip]
-    mn = ar[len(ar)/2]
-    sd = numpy.std(ar)
-    ax.set_zlim((mn-6*sd,mn+6*sd))
+    scatter_3d(goodtest_baddmap,badtest_baddmap)
     plt.savefig('bad_test.'+pdict['eps_val']+'.pdf', format='pdf')

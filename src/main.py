@@ -3,13 +3,11 @@
 '''Training and testing diffusion maps for the redmagic classification
 task.'''
 
-__author__ = 'Danny Goldstein <dgold@berkeley.edu>'
+__author__ = 'Alex Kim <agkim@lbl.gov>'
 
 import pyfits
 import pickle
 import diffuse
-from sklearn.preprocessing import StandardScaler
-from sklearn.cross_validation import train_test_split
 #import matplotlib
 #matplotlib.use('Agg')
 #import numpy as np
@@ -18,10 +16,39 @@ import numpy
 from argparse import ArgumentParser
 #from mpl_toolkits.mplot3d import Axes3D
 
+"""
+For the moment, the redshift range that we consider are set as global
+variables.
+
+The full redshift range of the sample is not used.  At high-redshift
+the number of objects with spectroscopic redshifts is small making
+the training and testing not robust.  The redshift range is based on
+photometric redshifts since this is available to all galaxies.
+"""
 zmin = 0.1
 zmax = 0.8
 
+"""
+The parameters that are to be optimized
+"""
+parameter_names =['bias_threshold','eps_val']
+
 class Data:
+
+    """ Storage class for the galaxy data.  These are stored natively
+    as arrays as the DM algorithms work with arrays.
+
+    Parameters
+    ----------
+    x : '~numpy.ndarray'
+       Coordinates.  Used as diffusion map coordinates
+    y : '~numpy.ndarray'
+       Redshift bias.  Used to define 'good' and 'bad' biases
+    z : '~numpy.ndarray'
+       Photometric redshift. Used to define redshift bins.  Photometric
+       (rather than spectroscopic) redshifts are used because they
+       are available for all galaxies.
+    """
 
     def __init__(self, x, y, z):
         self.x=x
@@ -29,13 +56,20 @@ class Data:
         self.z=z
 
     def __getitem__(self , index):
-#        print self.x.shape, len(index),self.x[index].shape
         return Data(self.x[index],self.y[index],self.z[index])
 
-# reads in data, get subset of data with redshifts, and splits into
-# test and training sets
+""" Method that reads in input data, selects those appropriate for
+    training and testing, and creates training and test subsets.
 
-def manage_data(test_size, random_state):
+    Parameters
+    ----------
+    test_size: float
+      Fraction of appropriate data reserved for test set
+    random_state: int or RandomState
+      Specifies the random assignment to train and test sets
+"""
+
+def manage_data(test_size=0.1, random_state=7):
     # Load training data
     f = pyfits.open('../data/stripe82_run_redmagic-1.0-08.fits')
     data = f[1].data
@@ -53,47 +87,96 @@ def manage_data(test_size, random_state):
     features = numpy.hstack((features, sdata['MABS'][:, 2].reshape(-1, 1))) # i magnitude
 
     # Scale features
+    from sklearn.preprocessing import StandardScaler
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
 
+    from sklearn.cross_validation import train_test_split
     # Split into training and testing sets
     X_train, X_test, y_train, y_test, z_train, z_test = \
                                         train_test_split(features_scaled,
                                                          bias,
-                                                         sdata['ZSPEC'],
+                                                         sdata['ZRED2'],
                                                          test_size=test_size,
                                                          random_state=random_state)
     return Data(X_train, y_train, z_train), Data(X_test,  y_test, z_test)
 
 
-# Diffusion map
 class DiffusionMap:
+
+    """ Class that encapsulates a diffusion map.  A diffusion map is
+    specified by coordinates x and parameters that dictate the
+    behavior of the diffusion map algorithm.  Based on reading and
+    discussions with Joey, the one free parameter to optimize is
+    eps_val.
+
+    Parameters
+    ----------
+
+    data : object of class Data
+    par : double
+       the value of eps_val
+
+    """
 
     def __init__(self, data, par):
        self.data = data
        self.par = par  #for the moment eps_val
 
     def make_map(self):
+
+        """ Method that calculates the diffusion map.  The result is
+        stored internally.
+        """
+
         kwargs=dict()
-        kwargs['eps_val'] = self.par)
+        kwargs['eps_val'] = self.par
         kwargs['t']=1
+        print self.data.x.shape
         self.dmap = diffuse.diffuse(self.data.x, **kwargs)
 
     def transform(self, x):
+
+        """ Method that calculates DM coordinates given input coordinates.
+
+        Parameters
+        ----------
+        x: '~numpy.ndarray'
+          Native coordinates for a set of points
+
+        Returns
+        -------
+        '~numpy.ndarray'
+          DM coordinates for a set of points
+        """
+
         return diffuse.nystrom(self.dmap, self.data.x, x)
 
 # New coordinate system is based on a set of diffusion maps
-class DMCoordinates:
+class DMSystem:
+    """ Class that manages the new coordinate system we want.
+    The new system is the union of several diffusion maps.
+
+    Parameters
+    ----------
+    data : Data
+       Data that enters into the diffusion maps
+    """
 
     def __init__(self, data):
-        self.nbins = 4
-        self.data = data
-        self.redshift_bins()
+        self.nbins =4
+        self.data = data 
+        self._redshift_bins()
+        self.state = None
         
-    def redshift_bins(self):
+    def _redshift_bins(self):
+        """ Calculates the photometric redshift bin ranges and
+        determine which subsets of Data go into which bin, the results
+        of which are set in self.wzbins
+        """
         zp = numpy.log(1+self.data.z)
-        lzmax = numpy.log(1+DMCoordinates.zmax)
-        lzmin = numpy.log(1+DMCoordinates.zmin)
+        lzmax = numpy.log(1+zmax)
+        lzmin = numpy.log(1+zmin)
         
         delta = (lzmax-lzmin+1e-16)/self.nbins
 
@@ -121,11 +204,23 @@ class DMCoordinates:
                 newmap = DiffusionMap(self.data[wboth],par[1])
                 self.dm.append(newmap)
 
+    def train(self):
+        for dm in self.dm:
+            dm.make_map()
+
     def coordinates(self, x, par):
-        self.create_dm(par)
-        for dm  in self.dm:
-            print dm.data.z.shape
-        
+
+        # if the current state of the diffusion maps is not equal
+        # to what is requested make them
+        if not numpy.array_equal(par,self.state):
+            self.create_dm(par)
+            self.train()
+
+        coords = numpy.array()
+        for dm in self.dm:
+            coords=numpy.append(coords, dm.transform(x))
+
+        return coords
 
 class WeightedBias:
 
@@ -159,7 +254,7 @@ if __name__ == '__main__':
 
     parser = ArgumentParser()
     parser.add_argument('test_size', nargs='?',default=0.1)
-    parser.add_argument('seed', nargs='?',default=4)
+    parser.add_argument('seed', nargs='?',default=9)
     
     ins = parser.parse_args()
     pdict=vars(ins)
@@ -167,13 +262,12 @@ if __name__ == '__main__':
     # data
     train_data, test_data = manage_data(pdict['test_size'],pdict['seed'])
 
-    # parameters
-    #par[0] = threshold in bias that defines good and bad
-    #par[1] = eps_val
+
     par=numpy.array((0.01,1e-2))
 
-    dmcoord= DMCoordinates(train_data)
-    dmcoord.coordinates(None,par)
+    dmcoord= DMSystem(train_data)
+    dmcoord.coordinates(train_data.x,par)
+    stop
     wb = WeightedBias(train_data)
     train(wb)
 

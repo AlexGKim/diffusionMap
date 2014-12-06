@@ -6,10 +6,7 @@ __author__ = 'Alex Kim <agkim@lbl.gov>'
 __contributors__ = ['Danny Goldstein <dgold@berkeley.edu>']
 __all__ = ['diffuse', 'nystrom']
 
-#import rpy2.robjects as robjects
-#from rpy2.robjects.packages import importr
-#import rpy2.robjects.numpy2ri
-#rpy2.robjects.numpy2ri.activate()
+
 #import gc
 import numpy
 import numpy as np
@@ -17,6 +14,11 @@ import scipy
 from scipy.stats import norm
 from scipy.sparse import *
 from scipy.sparse.linalg import eigsh
+
+#import rpy2.robjects as robjects
+#from rpy2.robjects.packages import importr
+#import rpy2.robjects.numpy2ri
+#rpy2.robjects.numpy2ri.activate()
 
 def diffuse(d, **kwargs):
     '''Uses the pair-wise distance matrix for a data set to compute
@@ -34,16 +36,24 @@ def diffuse(d, **kwargs):
     rpy2.robjects.r.dmap object containing the diffusion map
         coefficients for each sample.
     '''
-#   dM=importr('diffusionMap')
+
+    #dM=importr('diffusionMap')
     # R distance
     #xr=numpy.array(robjects.r.dist(d))
     # Python distance
     xr = scipy.spatial.distance.pdist(d, 'euclidean')
     xr_arr=scipy.spatial.distance.squareform(xr)
- 
-#    dmap = dM.diffuse(xr_arr, **kwargs)
+    #dmap = dM.diffuse(xr_arr, **kwargs)
     dmap = diffuse_py(xr_arr, **kwargs)
-
+    #dmap=dict()
+    #dmap['X']=dmap_.rx('X')
+    #dmap['phi0']=dmap_.rx('phi0')
+    #dmap['eigenvals']=dmap_.rx('eigenvals')
+    #dmap['eigenmult']=dmap_.rx('eigenmult')
+    #dmap['psi']=dmap_.rx('psi')
+    #dmap['phi']=dmap_.rx('phi')
+    #dmap['neigen']=dmap_.rx('neigen')
+    #dmap['epsilon']=dmap_.rx('epsilon')
     return dmap
 
 def nystrom(dmap, orig, d, sigma='default'):
@@ -73,9 +83,7 @@ def nystrom(dmap, orig, d, sigma='default'):
     The estimated diffusion coordinates for the new data, a matrix of
       dimensions m by p, where p is the dimensionality of the input
       diffusion map.
-    '''
-    
-    
+    '''    
     kwargs = {}
     if sigma != 'default':
         kwargs['sigma'] = sigma
@@ -143,7 +151,8 @@ def epsilonCompute(D, p=0.01):
    epsilon = 2*numpy.median(dist_knn)**2
    return epsilon
 
-def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5):
+def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.68):
+
   if eps_val == 'default':
     eps_val = epsilonCompute(D)
 
@@ -173,7 +182,7 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5):
     lambd= numpy.outer(numpy.zeros(n)+1., lambd)
     if neigen is None:
       lam=lambd[0,:]/lambd[0,0]
-      neigen= numpy.amax(numpy.where(lam > 0.05))+1
+      neigen= numpy.amax(numpy.where(lam > (1-var)))+1
       neigen = numpy.minimum(neigen,maxdim)
       eigenvals = eigenvals[0:neigen+1]
     X = psi[:,1:neigen+1]*lambd[:,0:neigen]
@@ -182,7 +191,7 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5):
     lambd=numpy.outer(numpy.zeros(n)+1., lambd)
     if neigen is None:
       lam=lambd[0,:]/lambd[0,0]
-      neigen= numpy.amax(numpy.where(lam > 0.05))+1
+      neigen= numpy.amax(numpy.where(lam > (1-var)))+1
       neigen = numpy.minimum(neigen,maxdim)
       eigenvals = eigenvals[0:neigen+1]
     X = psi[:,1:neigen+1]*lambd[:,0:neigen]

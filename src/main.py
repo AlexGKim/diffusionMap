@@ -78,6 +78,10 @@ def manage_data(test_size=0.1, random_state=7):
     inds = data['ZSPEC'] >= 0
     sdata = data[inds]
 
+    # Get rid of entries outside of photo-z range
+    inds = numpy.logical_and(sdata['ZRED2'] >= zmin, sdata['ZRED2'] < zmax)
+    sdata = sdata[inds]
+
     # Compute bias.
     bias = sdata['ZRED2'] - sdata['ZSPEC']
 
@@ -87,14 +91,14 @@ def manage_data(test_size=0.1, random_state=7):
     features = numpy.hstack((features, sdata['MABS'][:, 2].reshape(-1, 1))) # i magnitude
 
     # Scale features
-    from sklearn.preprocessing import StandardScaler
-    scaler = StandardScaler()
-    features_scaled = scaler.fit_transform(features)
+#    from sklearn.preprocessing import StandardScaler
+#    scaler = StandardScaler()
+#    features_scaled = scaler.fit_transform(features)
 
     from sklearn.cross_validation import train_test_split
     # Split into training and testing sets
     X_train, X_test, y_train, y_test, z_train, z_test = \
-                                        train_test_split(features_scaled,
+                                        train_test_split(features,
                                                          bias,
                                                          sdata['ZRED2'],
                                                          test_size=test_size,
@@ -130,9 +134,10 @@ class DiffusionMap:
         """
 
         kwargs=dict()
-        kwargs['eps_val'] = self.par
+        kwargs['eps_val'] = self.par.item()
         kwargs['t']=1
-        print self.data.x.shape
+        kwargs['delta']=1e-8
+#        print self.data.x.shape
         self.dmap = diffuse.diffuse(self.data.x, **kwargs)
 
     def transform(self, x):
@@ -216,9 +221,11 @@ class DMSystem:
             self.create_dm(par)
             self.train()
 
-        coords = numpy.array()
+        coords = numpy.empty((len(x),0))
         for dm in self.dm:
-            coords=numpy.append(coords, dm.transform(x))
+            print  dm.transform(x).shape,            
+            coords=numpy.append(coords, dm.transform(x),axis=1)
+            print coords.shape
 
         return coords
 

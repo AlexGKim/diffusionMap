@@ -5,16 +5,17 @@ task.'''
 
 __author__ = 'Alex Kim <agkim@lbl.gov>'
 
-import pyfits
-import pickle
-import diffuse
-#import matplotlib
-#matplotlib.use('Agg')
+
+#import pickle
 #import numpy as np
+import matplotlib
+#matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import numpy
-#import matplotlib.pyplot as plt
 from argparse import ArgumentParser
-#from mpl_toolkits.mplot3d import Axes3D
+import diffuse
+
 
 """
 For the moment, the redshift range that we consider are set as global
@@ -33,6 +34,7 @@ The parameters that are to be optimized
 """
 parameter_names =['bias_threshold','eps_val']
 
+
 class Data:
 
     """ Storage class for the galaxy data.  These are stored natively
@@ -50,13 +52,24 @@ class Data:
        are available for all galaxies.
     """
 
-    def __init__(self, x, y, z):
+    def __init__(self, x, y, z, xlabel = None, ylabel=None, zlabel=None):
         self.x=x
         self.y=y
         self.z=z
+        self.xlabel=xlabel
+        self.ylabel=ylabel
+        self.zlabel=zlabel
 
     def __getitem__(self , index):
         return Data(self.x[index],self.y[index],self.z[index])
+
+    def lessthan(self, thresh):
+        return self.y < thresh
+
+    def plot(self):
+        import triangle
+        figure  = triangle.corner(self.x)
+        return figure
 
 """ Method that reads in input data, selects those appropriate for
     training and testing, and creates training and test subsets.
@@ -71,6 +84,7 @@ class Data:
 
 def manage_data(test_size=0.1, random_state=7):
     # Load training data
+    import pyfits
     f = pyfits.open('../data/stripe82_run_redmagic-1.0-08.fits')
     data = f[1].data
 
@@ -103,7 +117,7 @@ def manage_data(test_size=0.1, random_state=7):
                                                          sdata['ZRED2'],
                                                          test_size=test_size,
                                                          random_state=random_state)
-    return Data(X_train, y_train, z_train), Data(X_test,  y_test, z_test)
+    return Data(X_train, y_train, z_train), Data(X_test,  y_test, z_test,xlabel=['g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z')
 
 
 class DiffusionMap:
@@ -157,6 +171,16 @@ class DiffusionMap:
 
         return diffuse.nystrom(self.dmap, self.data.x, x)
 
+    def plot(self,ax, oplot=False, **kwargs):
+
+        X=self.dmap['X']
+        ax.scatter(X.T[0],X.T[1],X.T[2],**kwargs)
+        if not oplot:
+            ax.set_xlabel('X[0]')
+            ax.set_ylabel('X[1]')
+            ax.set_zlabel('X[2]')
+
+
 # New coordinate system is based on a set of diffusion maps
 class DMSystem:
     """ Class that manages the new coordinate system we want.
@@ -206,12 +230,19 @@ class DMSystem:
                 wboth = numpy.logical_and(wzbin,wbbin)
                 if len(wboth) == 0:
                     raise Exception('Nothing in training set')
+                #print par
                 newmap = DiffusionMap(self.data[wboth],par[1])
                 self.dm.append(newmap)
 
     def train(self):
         for dm in self.dm:
             dm.make_map()
+            plt.clf()
+            fig=plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            dm.plot(ax)
+            plt.show()
+
 
     def coordinates(self, x, par):
 
@@ -223,22 +254,30 @@ class DMSystem:
 
         coords = numpy.empty((len(x),0))
         for dm in self.dm:
-            print  dm.transform(x).shape,            
             coords=numpy.append(coords, dm.transform(x),axis=1)
-            print coords.shape
 
         return coords
 
 class WeightedBias:
 
-    def __init__(self, data):
-        self.data = data
+    import sklearn
+
+    def __init__(self, dmsys, random_state=10):
+        self.dmsys = dmsys
+        self.random_state = random_state
+        import sklearn.ensemble
+        self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
 
     def biases(self):
-        return self.data.y
+        return self.dmsys.data.y
 
     def rule(self,par):
-        return numpy.arange(numpy.round(par[0]*len(self.data.y)),dtype='int')
+        dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
+        self.classifier.fit(dmcoords, self.dmsys.data.lessthan(par[0]))
+        ans=self.classifier.predict(dmcoords)
+        print type(ans), ans.shape
+        print ans
+        return ans
 
     def value(self,par):
         w = self.rule(par)
@@ -251,7 +290,7 @@ def train(wb):
 
     # the things to optimize are eps_val and threshold for good and bad
     fun=wb.value
-    x0 = numpy.zeros(1)+.2
+    x0 = numpy.array([0.01,0.001])
     import scipy.optimize
     ans = scipy.optimize.minimize(fun,x0)
     print ans
@@ -266,48 +305,22 @@ if __name__ == '__main__':
     ins = parser.parse_args()
     pdict=vars(ins)
 
+    rs = numpy.random.RandomState(pdict['seed'])
+
     # data
-    train_data, test_data = manage_data(pdict['test_size'],pdict['seed'])
+    train_data, test_data = manage_data(pdict['test_size'],rs)
 
+    # the new coordinate system based on the training data
+    dmsys= DMSystem(train_data)
 
-    par=numpy.array((0.01,1e-2))
+    # the calculation of the weighted bias
+    wb = WeightedBias(dmsys, rs)
 
-    dmcoord= DMSystem(train_data)
-    dmcoord.coordinates(train_data.x,par)
-    stop
-    wb = WeightedBias(train_data)
+    # optimization
     train(wb)
 
     shit
 
-    # Nystrom.
-    goodtest_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_good_test))
-    goodtrain_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_good_train))
-    badtrain_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_bad_train))
-    badtest_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_bad_test))
-
-    goodtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_good_test))
-    badtest_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_bad_test))
-    badtrain_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_bad_train))
-    goodtrain_gooddmap = np.array(diffuse.nystrom(dmap_good, X_good_train, X_good_train))
-
-    scatter_3d(goodtrain_baddmap,badtrain_baddmap)
-    plt.savefig('good_train.'+pdict['eps_val']+'.pdf', format='pdf')
-
-    scatter_3d(goodtrain_gooddmap,badtrain_gooddmap)
-    plt.savefig('bad_train.'+pdict['eps_val']+'.pdf', format='pdf')
-
-#    plot_dmap(dmap_good, None, y_good_train)
-    scatter_3d(goodtest_gooddmap,badtest_gooddmap)
-    plt.savefig('good_test.'+pdict['eps_val']+'.pdf', format='pdf')
-#    scatter(goodtest_gooddmap, y_good_test, marker='+', label='low bias')
-#    scatter(badtest_gooddmap, y_bad_test, marker='^', label='high bias')
-
-    scatter_3d(goodtest_baddmap,badtest_baddmap)
-    plt.savefig('bad_test.'+pdict['eps_val']+'.pdf', format='pdf')
-
-# use badtrain_*map as the data for "bad", and goodtrain_*map as the data for "good" to establish the basis for the random forest.
-# performance will be based on data of *test_*map
 
 
 

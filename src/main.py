@@ -11,6 +11,7 @@ __author__ = 'Alex Kim <agkim@lbl.gov>'
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.mplot3d import Axes3D
 import numpy
 from argparse import ArgumentParser
@@ -34,6 +35,28 @@ The parameters that are to be optimized
 """
 parameter_names =['bias_threshold','eps_val']
 
+
+class Plots:
+    @staticmethod
+    def diffusionMaps(dmsystem):
+        dmlabels=[]
+        for dm in dmsystem.dm:
+            dmlabels.append(dm.label)
+        dmlabels=numpy.array(dmlabels)
+        zlabels  = numpy.unique(dmlabels[:,0])
+        pp = PdfPages('temp.pdf')
+        #not right, want good/bad for each of the permutations
+        for zlabel in zlabels:
+            plt.clf()
+            fig=plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            w= numpy.where(numpy.logical_and(dmlabels[:,0] == zlabel, dmlabels[:,1]=='good'))[0]
+            dmsystem.dm[w].plot(ax,marker='D',c='b')
+            w= numpy.where(numpy.logical_and(dmlabels[:,0] == zlabel, dmlabels[:,1]=='bad'))[0]
+            dmsystem.dm[w].plot(ax,marker='^',c='r')
+            pp.savefig()
+        pp.close()
+        print shit
 
 class Data:
 
@@ -137,9 +160,10 @@ class DiffusionMap:
 
     """
 
-    def __init__(self, data, par):
+    def __init__(self, data, par, label=None):
        self.data = data
        self.par = par  #for the moment eps_val
+       self.label=label
 
     def make_map(self):
 
@@ -225,23 +249,18 @@ class DMSystem:
 
         self.dm=[]
         
-        for wzbin in self.wzbins:
-            for wbbin in [good_inds,bad_inds]:
+        for wzbin,zlab in zip(self.wzbins,xrange(len(self.wzbins))):
+            for wbbin,blab in zip([good_inds,bad_inds],['good','bad']):
                 wboth = numpy.logical_and(wzbin,wbbin)
                 if len(wboth) == 0:
                     raise Exception('Nothing in training set')
                 #print par
-                newmap = DiffusionMap(self.data[wboth],par[1])
+                newmap = DiffusionMap(self.data[wboth],par[1],numpy.array([zlab,blab]))
                 self.dm.append(newmap)
 
     def train(self):
         for dm in self.dm:
             dm.make_map()
-            plt.clf()
-            fig=plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            dm.plot(ax)
-            plt.show()
 
 
     def coordinates(self, x, par):
@@ -312,7 +331,13 @@ if __name__ == '__main__':
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
+    x0 = numpy.array([0.01,0.001])
+    dmsys.create_dm(x0)
+    dmsys.train()
 
+    Plots.diffusionMaps(dmsys)
+
+    shit
     # the calculation of the weighted bias
     wb = WeightedBias(dmsys, rs)
 

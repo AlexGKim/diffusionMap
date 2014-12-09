@@ -6,7 +6,7 @@ task.'''
 __author__ = 'Alex Kim <agkim@lbl.gov>'
 
 
-#import pickle
+import pickle
 #import numpy as np
 import matplotlib
 #matplotlib.use('Agg')
@@ -39,24 +39,27 @@ parameter_names =['bias_threshold','eps_val']
 class Plots:
     @staticmethod
     def diffusionMaps(dmsystem):
-        dmlabels=[]
-        for dm in dmsystem.dm:
-            dmlabels.append(dm.label)
-        dmlabels=numpy.array(dmlabels)
-        zlabels  = numpy.unique(dmlabels[:,0])
+        dmz = [dm['zbin'] for dm in dmsystem.dm]
+        dmb = [dm['bias'] for dm in dmsystem.dm]
+        zs = numpy.unique(dmz)
+
         pp = PdfPages('temp.pdf')
-        #not right, want good/bad for each of the permutations
-        for zlabel in zlabels:
-            plt.clf()
-            fig=plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            w= numpy.where(numpy.logical_and(dmlabels[:,0] == zlabel, dmlabels[:,1]=='good'))[0]
-            dmsystem.dm[w].plot(ax,marker='D',c='b')
-            w= numpy.where(numpy.logical_and(dmlabels[:,0] == zlabel, dmlabels[:,1]=='bad'))[0]
-            dmsystem.dm[w].plot(ax,marker='^',c='r')
-            pp.savefig()
+        for z in zs:
+            wg=numpy.where(numpy.logical_and(dmz == z,[b==True for b in dmb]))[0]
+            wb=numpy.where(numpy.logical_and(dmz == z,[b==False for b in dmb]))[0]
+            for b in [True, False]:
+                plt.clf()
+                fig=plt.figure()
+                ax = fig.add_subplot(111, projection='3d')
+                if b == 'good':
+                    dmsystem.dm[wg]['dm'].plot(ax,marker='D',c='b')
+                    dmsystem.dm[wg]['dm'].plot_external(ax,dmsystem.dm[wb]['dm'].data.x,marker='^',c='r',oplot=True)
+                else:
+                    dmsystem.dm[wb]['dm'].plot(ax,marker='^',c='r')
+                    dmsystem.dm[wb]['dm'].plot_external(ax,dmsystem.dm[wg]['dm'].data.x,marker='D',c='b',oplot=True)
+                plt.title(str(z)+" "+str(b))
+                pp.savefig()
         pp.close()
-        print shit
 
 class Data:
 
@@ -163,7 +166,7 @@ class DiffusionMap:
     def __init__(self, data, par, label=None):
        self.data = data
        self.par = par  #for the moment eps_val
-       self.label=label
+       self.key=label
 
     def make_map(self):
 
@@ -196,8 +199,15 @@ class DiffusionMap:
         return diffuse.nystrom(self.dmap, self.data.x, x)
 
     def plot(self,ax, oplot=False, **kwargs):
-
         X=self.dmap['X']
+        ax.scatter(X.T[0],X.T[1],X.T[2],**kwargs)
+        if not oplot:
+            ax.set_xlabel('X[0]')
+            ax.set_ylabel('X[1]')
+            ax.set_zlabel('X[2]')
+
+    def plot_external(self,ax, inx, oplot=False, **kwargs):
+        X = self.transform(inx)
         ax.scatter(X.T[0],X.T[1],X.T[2],**kwargs)
         if not oplot:
             ax.set_xlabel('X[0]')
@@ -244,23 +254,27 @@ class DMSystem:
         bias = self.data.y
 
     # Split into "good" and "bad" samples
-        good_inds = abs(bias) <= par[0]
+        good_inds = numpy.abs(bias) <= par[0]
         bad_inds = numpy.logical_not(good_inds)
 
         self.dm=[]
         
         for wzbin,zlab in zip(self.wzbins,xrange(len(self.wzbins))):
-            for wbbin,blab in zip([good_inds,bad_inds],['good','bad']):
+           for wbbin,blab in zip([good_inds,bad_inds],[True,False]):
                 wboth = numpy.logical_and(wzbin,wbbin)
                 if len(wboth) == 0:
                     raise Exception('Nothing in training set')
                 #print par
-                newmap = DiffusionMap(self.data[wboth],par[1],numpy.array([zlab,blab]))
-                self.dm.append(newmap)
+                key=dict()
+                key['zbin']=zlab
+                key['bias']=blab
+                newmap = DiffusionMap(self.data[wboth],par[1],key)
+                key['dm']=newmap
+                self.dm.append(key)
 
     def train(self):
         for dm in self.dm:
-            dm.make_map()
+            dm['dm'].make_map()
 
 
     def coordinates(self, x, par):
@@ -273,7 +287,7 @@ class DMSystem:
 
         coords = numpy.empty((len(x),0))
         for dm in self.dm:
-            coords=numpy.append(coords, dm.transform(x),axis=1)
+            coords=numpy.append(coords, dm['dm'].transform(x),axis=1)
 
         return coords
 
@@ -290,28 +304,33 @@ class WeightedBias:
     def biases(self):
         return self.dmsys.data.y
 
-    def rule(self,par):
-        dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
-        self.classifier.fit(dmcoords, self.dmsys.data.lessthan(par[0]))
-        ans=self.classifier.predict(dmcoords)
-        print type(ans), ans.shape
-        print ans
-        return ans
-
     def value(self,par):
-        w = self.rule(par)
-        if len(w) == 0:
+        print par
+        dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
+        y = numpy.array(self.dmsys.data.y)
+
+        #some coordinates have nan because they are outliers
+        for i in xrange(dmcoords.shape[0]-1,-1,-1):
+            if numpy.isnan(dmcoords[i,:]).any():
+                dmcoords=numpy.delete(dmcoords,i,axis=0)
+                y=numpy.delete(y,i)
+
+        self.classifier.fit(dmcoords, numpy.abs(y) <= par[0])
+        ans=self.classifier.predict(dmcoords)
+        if numpy.sum(ans) == 0:
             raise Exception("No passing objects")
         else:
-            return numpy.sum(self.biases()[w])**2/len(w)
+            res = numpy.sum(y[ans])**2/numpy.sum(ans)
+            print res, numpy.sum(ans)
+            return res
  
 def train(wb):
 
     # the things to optimize are eps_val and threshold for good and bad
     fun=wb.value
-    x0 = numpy.array([0.01,0.001])
+    x0 = numpy.array([0.015,0.001])
     import scipy.optimize
-    ans = scipy.optimize.minimize(fun,x0)
+    ans = scipy.optimize.minimize(fun,x0,bounds=[(0.01,0.1),(1e-4,1e-2)])
     print ans
     return
     
@@ -335,17 +354,14 @@ if __name__ == '__main__':
     dmsys.create_dm(x0)
     dmsys.train()
 
-    Plots.diffusionMaps(dmsys)
+#    Plots.diffusionMaps(dmsys)
 
-    shit
     # the calculation of the weighted bias
     wb = WeightedBias(dmsys, rs)
 
     # optimization
-    train(wb)
+    t=train(wb)
+    Plots.diffusionMaps(dmsys)
+    pickle.dump(t,dmsys, open("trained_dmsystem.pkl","wb"))
 
     shit
-
-
-
-

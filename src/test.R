@@ -1,6 +1,10 @@
 library("diffusionMap")
-x <- c(10.4, 5.6, 3.1, 6.4, 21.7)
-y <- c(36, 74. ,3,57, 97)
-xy <- outer(x,y,"*")
+nc <= 3
+nr <- 20
+x<- runif(nr*nc,min=0.01,max=1)
+m <- matrix(x,nrow=20,ncol=3)
+xy <- dist(m)
 
 ans <- diffuse(xy)
+dum <- nystrom(ans,xy,xy)
+dum

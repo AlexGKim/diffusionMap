@@ -51,7 +51,7 @@ class Plots:
                 plt.clf()
                 fig=plt.figure()
                 ax = fig.add_subplot(111, projection='3d')
-                if b == 'good':
+                if b:
                     dmsystem.dm[wg]['dm'].plot(ax,marker='D',c='b')
                     dmsystem.dm[wg]['dm'].plot_external(ax,dmsystem.dm[wb]['dm'].data.x,marker='^',c='r',oplot=True)
                 else:
@@ -143,6 +143,7 @@ def manage_data(test_size=0.1, random_state=7):
                                                          sdata['ZRED2'],
                                                          test_size=test_size,
                                                          random_state=random_state)
+
     return Data(X_train, y_train, z_train), Data(X_test,  y_test, z_test,xlabel=['g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z')
 
 
@@ -301,11 +302,7 @@ class WeightedBias:
         import sklearn.ensemble
         self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
 
-    def biases(self):
-        return self.dmsys.data.y
-
-    def value(self,par):
-        print par
+    def train(self,par):
         dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
         y = numpy.array(self.dmsys.data.y)
 
@@ -316,23 +313,50 @@ class WeightedBias:
                 y=numpy.delete(y,i)
 
         self.classifier.fit(dmcoords, numpy.abs(y) <= par[0])
+        return dmcoords, y
+
+    def weighted_mean(self, dmcoords, y, par):
+        self.classifier.fit(dmcoords, numpy.abs(y) <= par[0])
         ans=self.classifier.predict(dmcoords)
         if numpy.sum(ans) == 0:
             raise Exception("No passing objects")
         else:
-            res = numpy.sum(y[ans])**2/numpy.sum(ans)
-            print res, numpy.sum(ans)
+            res= numpy.mean(y[ans])
+            print res, numpy.sum(ans),
+            res = res**2/numpy.sum(ans)
+            print res
             return res
+
+    def value_internal(self, par):
+        print par
+        dmcoords, y = self.train(par)
+        return self.weighted_mean(dmcoords,y,par)
+
+    def value_external(self, x_, y_, par):
+        self.train(par)
+        dmcoords = self.dmsys.coordinates(x_, par)
+        y = numpy.array(y_)
+        #some coordinates have nan because they are outliers
+        for i in xrange(dmcoords.shape[0]-1,-1,-1):
+            if numpy.isnan(dmcoords[i,:]).any():
+                dmcoords=numpy.delete(dmcoords,i,axis=0)
+                y=numpy.delete(y,i)
+
+        return self.weighted_mean(dmcoords,y,par)
+
  
 def train(wb):
 
     # the things to optimize are eps_val and threshold for good and bad
-    fun=wb.value
+    fun=wb.value_internal
     x0 = numpy.array([0.015,0.001])
     import scipy.optimize
-    ans = scipy.optimize.minimize(fun,x0,bounds=[(0.01,0.1),(1e-4,1e-2)])
+    ans = scipy.optimize.brute(fun,((0.01,0.1),(5e-4,3e-2)),finish=scipy.optimize.fmin)
+#    print ans[0], type(ans[0])
+#    ans2=  scipy.optimize.minimize(fun,ans[0],bounds=[(0.01,0.1),(5e-4,3e-2)])
     print ans
     return
+
     
 if __name__ == '__main__':
 
@@ -351,17 +375,16 @@ if __name__ == '__main__':
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
     x0 = numpy.array([0.01,0.001])
-    dmsys.create_dm(x0)
-    dmsys.train()
-
-#    Plots.diffusionMaps(dmsys)
+#    dmsys.create_dm(x0)
+#    dmsys.train()
 
     # the calculation of the weighted bias
     wb = WeightedBias(dmsys, rs)
 
     # optimization
-    t=train(wb)
-    Plots.diffusionMaps(dmsys)
-    pickle.dump(t,dmsys, open("trained_dmsystem.pkl","wb"))
+#    t=train(wb)
+#    Plots.diffusionMaps(dmsys)
+    wb.value_external(test_data.x, test_data.y, x0)
+#    pickle.dump([t,dmsys], open("trained_dmsystem.pkl","wb"))
 
     shit

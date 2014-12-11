@@ -172,7 +172,6 @@ if __name__ == '__main__':
     plot_dmap(dmap_bad, 'bad_init.'+pdict['eps_val']+'.pdf', y_bad_train)
 
     # Nystrom.
-
     goodtest_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_good_test))
     goodtrain_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_good_train))
     badtrain_baddmap = np.array(diffuse.nystrom(dmap_bad, X_bad_train, X_bad_train))
@@ -197,3 +196,6 @@ if __name__ == '__main__':
 
     scatter_3d(goodtest_baddmap,badtest_baddmap)
     plt.savefig('bad_test.'+pdict['eps_val']+'.pdf', format='pdf')
+
+# use badtrain_*map as the data for "bad", and goodtrain_*map as the data for "good" to establish the basis for the random forest.
+# performance will be based on data of *test_*map

@@ -251,7 +251,9 @@ class DMSystem:
             self.wzbins.append(numpy.logical_and(dum,zp< lzmin+(i+1)*delta))
 
     def create_dm(self, par):
-        
+        if numpy.array_equal(self.state,par):
+            return
+
         bias = self.data.y
 
     # Split into "good" and "bad" samples
@@ -270,21 +272,23 @@ class DMSystem:
                 key['zbin']=zlab
                 key['bias']=blab
                 newmap = DiffusionMap(self.data[wboth],par[1],key)
+                newmap.make_map()
                 key['dm']=newmap
                 self.dm.append(key)
 
-    def train(self):
-        for dm in self.dm:
-            dm['dm'].make_map()
+        self.state = par
+#    def train(self):
+#        for dm in self.dm:
+#            dm['dm'].make_map()
 
 
     def coordinates(self, x, par):
 
         # if the current state of the diffusion maps is not equal
         # to what is requested make them
-        if not numpy.array_equal(par,self.state):
-            self.create_dm(par)
-            self.train()
+        #if not numpy.array_equal(par,self.state):
+        self.create_dm(par)
+            #self.train()
 
         coords = numpy.empty((len(x),0))
         for dm in self.dm:
@@ -322,7 +326,7 @@ class WeightedBias:
             raise Exception("No passing objects")
         else:
             res= numpy.mean(y[ans])
-            print res, numpy.sum(ans),
+            print y.mean(), y.std(), res, y[ans].std(), numpy.sum(ans),
             res = res**2/numpy.sum(ans)
             print res
             return res
@@ -351,7 +355,7 @@ def train(wb):
     fun=wb.value_internal
     x0 = numpy.array([0.015,0.001])
     import scipy.optimize
-    ans = scipy.optimize.brute(fun,((0.01,0.1),(5e-4,3e-2)),finish=scipy.optimize.fmin)
+    ans = scipy.optimize.brute(fun,((0.01,0.04),(5e-4,3e-2)),finish=scipy.optimize.fmin)
 #    print ans[0], type(ans[0])
 #    ans2=  scipy.optimize.minimize(fun,ans[0],bounds=[(0.01,0.1),(5e-4,3e-2)])
     print ans

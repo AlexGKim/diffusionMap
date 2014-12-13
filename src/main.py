@@ -43,7 +43,7 @@ class Plots:
         dmb = [dm['bias'] for dm in dmsystem.dm]
         zs = numpy.unique(dmz)
 
-        pp = PdfPages('temp.pdf')
+        pp = PdfPages('dm.pdf')
         for z in zs:
             wg=numpy.where(numpy.logical_and(dmz == z,[b==True for b in dmb]))[0]
             wb=numpy.where(numpy.logical_and(dmz == z,[b==False for b in dmb]))[0]
@@ -60,6 +60,29 @@ class Plots:
                 plt.title(str(z)+" "+str(b))
                 pp.savefig()
         pp.close()
+
+    @staticmethod
+    def x(x,good='default'):
+        if good == 'default':
+            good=numpy.empty(x.shape[0],dtype='bool')
+            good.fill(True)
+        notgood = numpy.logical_not(good)
+
+#        plt.clf()
+#        pp=PdfPages('triangle.pdf')
+        ndim=x.shape[1]-1
+        fig, axes = plt.subplots(nrows=ndim,ncols=ndim)
+        for ic in xrange(ndim):
+            for ir in xrange(ic,ndim):
+                axes[ir,ic].scatter(x[good,ic],x[good,ir+1],s=2,marker='.',color='blue',alpha=0.025)
+                if notgood.sum() > 0:
+                    axes[ir,ic].scatter(x[notgood,ic],x[notgood,ir+1],s=2,marker='.',color='red',alpha=0.025)
+
+        plt.show()
+        wfe
+
+        
+
 
 class Data:
 
@@ -130,6 +153,15 @@ def manage_data(test_size=0.1, random_state=7):
     features = sdata['MABS'][:, :-1] - sdata['MABS'][:, 1:] # colors
     features = numpy.hstack((features, sdata['MABS'][:, 2].reshape(-1, 1))) # i magnitude
 
+    # Some cuts based on outliers
+    inds = features[:,0] <4
+    inds = numpy.logical_and(inds, features[:,1]<4)
+    inds = numpy.logical_and(inds, features[:,2] > 0.1)
+
+    sdata=sdata[inds]
+    bias=bias[inds]
+    features=features[inds]
+
     # Scale features
 #    from sklearn.preprocessing import StandardScaler
 #    scaler = StandardScaler()
@@ -143,7 +175,8 @@ def manage_data(test_size=0.1, random_state=7):
                                                          sdata['ZRED2'],
                                                          test_size=test_size,
                                                          random_state=random_state)
-
+    Plots.x(X_train,good=numpy.abs(y_train) <0.01)
+    wfe
     return Data(X_train, y_train, z_train), Data(X_test,  y_test, z_test,xlabel=['g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z')
 
 
@@ -179,6 +212,7 @@ class DiffusionMap:
         kwargs['eps_val'] = self.par.item()
         kwargs['t']=1
         kwargs['delta']=1e-8
+        kwargs['var']=0.5
         self.dmap = diffuse.diffuse(self.data.x, **kwargs)
 
     def transform(self, x):
@@ -314,10 +348,11 @@ class WeightedBias:
         ok = DMSystem.hasTrainingAnalog(dmcoords)
 
         self.classifier.fit(dmcoords[ok,:], numpy.abs(y[ok]) <= par[0])
-        return dmcoords, y
+        self.dmcoords=dmcoords
+        self.hasAnalog=ok
+#        return dmcoords, y
 
     def weighted_mean(self, dmcoords, y, par):
-        self.classifier.fit(dmcoords, numpy.abs(y) <= par[0])
         ans=self.classifier.predict(dmcoords)
         if numpy.sum(ans) == 0:
             raise Exception("No passing objects")
@@ -330,8 +365,8 @@ class WeightedBias:
 
     def value_internal(self, par):
         print par
-        dmcoords, y = self.train(par)
-        return self.weighted_mean(dmcoords,y,par)
+        self.train(par)
+        return self.weighted_mean(self.dmcoords[self.hasAnalog],self.dmsys.y[self.hasAnalog],par)
 
     def value_external(self, x_, y_, par):
         self.train(par)
@@ -345,7 +380,7 @@ def train(wb):
 
     # the things to optimize are eps_val and threshold for good and bad
     fun=wb.value_internal
-    x0 = numpy.array([0.015,0.001])
+    #x0 = numpy.array([0.015,0.001])
     import scipy.optimize
     ans = scipy.optimize.brute(fun,((0.01,0.04),(5e-4,3e-2)),finish=scipy.optimize.fmin)
 #    print ans[0], type(ans[0])

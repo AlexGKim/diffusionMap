@@ -179,7 +179,6 @@ class DiffusionMap:
         kwargs['eps_val'] = self.par.item()
         kwargs['t']=1
         kwargs['delta']=1e-8
-#        print self.data.x.shape
         self.dmap = diffuse.diffuse(self.data.x, **kwargs)
 
     def transform(self, x):
@@ -226,6 +225,15 @@ class DMSystem:
     data : Data
        Data that enters into the diffusion maps
     """
+    @staticmethod
+    def hasTrainingAnalog(dmcoords):
+        ans = numpy.empty(dmcoords.shape[0],dtype='bool')
+
+        for i in xrange(dmcoords.shape[0]):
+            ans[i] = not numpy.isnan(dmcoords[i,:]).any()
+
+        return ans
+
 
     def __init__(self, data):
         self.nbins =4
@@ -267,7 +275,6 @@ class DMSystem:
                 wboth = numpy.logical_and(wzbin,wbbin)
                 if len(wboth) == 0:
                     raise Exception('Nothing in training set')
-                #print par
                 key=dict()
                 key['zbin']=zlab
                 key['bias']=blab
@@ -277,18 +284,12 @@ class DMSystem:
                 self.dm.append(key)
 
         self.state = par
-#    def train(self):
-#        for dm in self.dm:
-#            dm['dm'].make_map()
-
 
     def coordinates(self, x, par):
 
         # if the current state of the diffusion maps is not equal
         # to what is requested make them
-        #if not numpy.array_equal(par,self.state):
         self.create_dm(par)
-            #self.train()
 
         coords = numpy.empty((len(x),0))
         for dm in self.dm:
@@ -310,13 +311,9 @@ class WeightedBias:
         dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
         y = numpy.array(self.dmsys.data.y)
 
-        #some coordinates have nan because they are outliers
-        for i in xrange(dmcoords.shape[0]-1,-1,-1):
-            if numpy.isnan(dmcoords[i,:]).any():
-                dmcoords=numpy.delete(dmcoords,i,axis=0)
-                y=numpy.delete(y,i)
+        ok = DMSystem.hasTrainingAnalog(dmcoords)
 
-        self.classifier.fit(dmcoords, numpy.abs(y) <= par[0])
+        self.classifier.fit(dmcoords[ok,:], numpy.abs(y[ok]) <= par[0])
         return dmcoords, y
 
     def weighted_mean(self, dmcoords, y, par):
@@ -339,14 +336,9 @@ class WeightedBias:
     def value_external(self, x_, y_, par):
         self.train(par)
         dmcoords = self.dmsys.coordinates(x_, par)
-        y = numpy.array(y_)
-        #some coordinates have nan because they are outliers
-        for i in xrange(dmcoords.shape[0]-1,-1,-1):
-            if numpy.isnan(dmcoords[i,:]).any():
-                dmcoords=numpy.delete(dmcoords,i,axis=0)
-                y=numpy.delete(y,i)
 
-        return self.weighted_mean(dmcoords,y,par)
+        ok = DMSystem.hasTrainingAnalog(dmcoords)
+        return self.weighted_mean(dmcoords[ok,:],y_[ok],par)
 
  
 def train(wb):

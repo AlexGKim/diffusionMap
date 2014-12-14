@@ -62,23 +62,38 @@ class Plots:
         pp.close()
 
     @staticmethod
-    def x(x,good='default'):
+    def x(x,good='default',xlabel=None):
         if good == 'default':
             good=numpy.empty(x.shape[0],dtype='bool')
             good.fill(True)
         notgood = numpy.logical_not(good)
 
-#        plt.clf()
-#        pp=PdfPages('triangle.pdf')
+        plt.clf()
+        pp=PdfPages('x.pdf')
         ndim=x.shape[1]-1
         fig, axes = plt.subplots(nrows=ndim,ncols=ndim)
+        for i in xrange(axes.shape[0]):
+            for j in xrange(axes.shape[1]):
+                axes[i,j].set_visible(False)
+
         for ic in xrange(ndim):
             for ir in xrange(ic,ndim):
-                axes[ir,ic].scatter(x[good,ic],x[good,ir+1],s=2,marker='.',color='blue',alpha=0.025)
+                axes[ir,ic].set_visible(True)
+                axes[ir,ic].scatter(x[good,ic],x[good,ir+1],s=2,marker='.',color='blue',alpha=0.025,label='low bias')
                 if notgood.sum() > 0:
-                    axes[ir,ic].scatter(x[notgood,ic],x[notgood,ir+1],s=2,marker='.',color='red',alpha=0.025)
-
-        plt.show()
+                    axes[ir,ic].scatter(x[notgood,ic],x[notgood,ir+1],s=2,marker='.',color='red',alpha=0.025,label='high bias')
+                axes[ir,ic].legend(prop={'size':6})
+                if xlabel is not None:
+                    if ic==0:
+                        axes[ir,ic].set_ylabel(xlabel[ir+1])
+                    if ir==ndim-1:
+                        axes[ir,ic].set_xlabel(xlabel[ic])
+                if ic != 0:
+                    axes[ir,ic].get_yaxis().set_visible(False)
+                if ir !=ndim-1:
+                    axes[ir,ic].get_xaxis().set_visible(False)
+        pp.savefig()
+        pp.close()
         wfe
 
         
@@ -175,9 +190,9 @@ def manage_data(test_size=0.1, random_state=7):
                                                          sdata['ZRED2'],
                                                          test_size=test_size,
                                                          random_state=random_state)
-    Plots.x(X_train,good=numpy.abs(y_train) <0.01)
-    wfe
-    return Data(X_train, y_train, z_train), Data(X_test,  y_test, z_test,xlabel=['g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z')
+#    Plots.x(X_train,good=numpy.abs(y_train) <0.01)
+#    wfe
+    return Data(X_train, y_train, z_train,xlabel=['g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z'), Data(X_test,  y_test, z_test,xlabel=['g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z')
 
 
 class DiffusionMap:
@@ -212,7 +227,7 @@ class DiffusionMap:
         kwargs['eps_val'] = self.par.item()
         kwargs['t']=1
         kwargs['delta']=1e-8
-        kwargs['var']=0.5
+        kwargs['var']=0.95
         self.dmap = diffuse.diffuse(self.data.x, **kwargs)
 
     def transform(self, x):
@@ -269,17 +284,32 @@ class DMSystem:
         return ans
 
 
-    def __init__(self, data):
-        self.nbins =4
+    def __init__(self, data, config = 'default'):
         self.data = data 
-        self._redshift_bins()
-        self.state = None
         
-    def _redshift_bins(self):
+        self.state = None
+
+        if config == 'default':
+            self.config = self._onebad
+        else:
+            self.config = self._redshift_bins
+
+    def _onebad(self, good_inds, bad_inds, par):
+        self.dm=[]
+
+        key = dict()
+        newmap=DiffusionMap(self.data[bad_inds],par[1],key)
+        key['dm']=newmap
+        self.dm.append(key)
+
+        
+    def _redshift_bins(self, good_inds, bad_inds, par):
         """ Calculates the photometric redshift bin ranges and
         determine which subsets of Data go into which bin, the results
         of which are set in self.wzbins
         """
+        self.nbins =4
+
         zp = numpy.log(1+self.data.z)
         lzmax = numpy.log(1+zmax)
         lzmin = numpy.log(1+zmin)
@@ -292,16 +322,6 @@ class DMSystem:
             dum = zp >= lzmin+i*delta
             self.wzbins.append(numpy.logical_and(dum,zp< lzmin+(i+1)*delta))
 
-    def create_dm(self, par):
-        if numpy.array_equal(self.state,par):
-            return
-
-        bias = self.data.y
-
-    # Split into "good" and "bad" samples
-        good_inds = numpy.abs(bias) <= par[0]
-        bad_inds = numpy.logical_not(good_inds)
-
         self.dm=[]
         
         for wzbin,zlab in zip(self.wzbins,xrange(len(self.wzbins))):
@@ -313,9 +333,24 @@ class DMSystem:
                 key['zbin']=zlab
                 key['bias']=blab
                 newmap = DiffusionMap(self.data[wboth],par[1],key)
-                newmap.make_map()
                 key['dm']=newmap
                 self.dm.append(key)
+
+    def create_dm(self, par):
+        if numpy.array_equal(self.state,par):
+            return
+
+        bias = self.data.y
+
+    # Split into "good" and "bad" samples
+        good_inds = numpy.abs(bias) <= par[0]
+        bad_inds = numpy.logical_not(good_inds)
+
+        self.config(good_inds, bad_inds, par)
+
+
+        for dm in self.dm:
+            dm['dm'].make_map()
 
         self.state = par
 
@@ -353,7 +388,12 @@ class WeightedBias:
 #        return dmcoords, y
 
     def weighted_mean(self, dmcoords, y, par):
-        ans=self.classifier.predict(dmcoords)
+        print self.classifier.classes_
+        goodin=numpy.where(self.classifier.classes_)[0][0]
+        proba=self.classifier.predict_proba(dmcoords)[:,goodin]
+        ans = proba > 0.9
+#        print goodin.shape, proba.shape,ans.shape 
+#        ans=self.classifier.predict(dmcoords)
         if numpy.sum(ans) == 0:
             raise Exception("No passing objects")
         else:
@@ -402,10 +442,11 @@ if __name__ == '__main__':
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
+#    Plots.x(train_data.x,good=numpy.abs(train_data.y)< 0.01, xlabel=train_data.xlabel)
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
-    x0 = numpy.array([0.01,0.001])
+    x0 = numpy.array([0.01,0.0001])
 #    dmsys.create_dm(x0)
 #    dmsys.train()
 

@@ -62,31 +62,49 @@ class Plots:
         pp.close()
 
     @staticmethod
-    def falseDiffusionMap(dm):
+    def falseDiffusionMap(dmsys,x0):
+        alpha=0.03
+        s=5
         ndim=4
-        pp=PdfPages('baddm.pdf')
-        print dm.dmap['X'][:,0].min(), dm.dmap['X'][:,0].max()
-        print dm.dmap['X'][:,1].min(), dm.dmap['X'][:,1].max()
-        print dm.dmap['X'][:,2].min(), dm.dmap['X'][:,2].max()
-        print dm.dmap['X'][:,3].min(), dm.dmap['X'][:,3].max()
-        fwe
-        plt.clf()
-        Plots.x(dm.dmap['X'][:,xrange(ndim)])
-        pp.savefig()
-        pp.close()
-        dwe
+        dm=dmsys.dm[0]['dm']
+        goodx=dmsys.data.x[numpy.abs(dmsys.data.y) <= x0[0]]
+#        print dm.dmap['X'][:,0].min(), dm.dmap['X'][:,0].max()
+#        print dm.dmap['X'][:,1].min(), dm.dmap['X'][:,1].max()
+#        print dm.dmap['X'][:,2].min(), dm.dmap['X'][:,2].max()
+#        print dm.dmap['X'][:,3].min(), dm.dmap['X'][:,3].max()
+        plt.figure(num=1,figsize=(8,6))
+        figax = plt.subplots(nrows=ndim-1,ncols=ndim-1)
+        x = dm.transform(goodx)
+        Plots.x(x[:,xrange(ndim)],figax=figax,label='low bias',color='blue',alpha=alpha,s=s)
+        Plots.x(dm.dmap['X'][:,xrange(ndim)],figax=figax,label='high bias',color='red',alpha=alpha,s=s)
 
-        
     @staticmethod
-    def x(x,good='default',xlabel=None):
-        if good == 'default':
-            good=numpy.empty(x.shape[0],dtype='bool')
-            good.fill(True)
-        notgood = numpy.logical_not(good)
+    def data(data,par,**kwargs):
+        alpha=0.03
+        s=5
+        marker='.'
+        ndim=data.x.shape[1]
+
+        figax = plt.subplots(nrows=ndim-1,ncols=ndim-1)
+#        print (numpy.abs(data.y) > par[0]).sum()
+        Plots.x(data.x[numpy.abs(data.y) <= par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='blue',label='low bias',xlabel=data.xlabel)
+        Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='red',label='high bias',xlabel=data.xlabel)
+
+
+    @staticmethod
+    def x(x,good='default',xlabel=None, figax='default',**kwargs):
+ #       if good == 'default':
+ #           good=numpy.empty(x.shape[0],dtype='bool')
+ #           good.fill(True)
+ #       notgood = numpy.logical_not(good)
+
+        ndim=x.shape[1]-1
+        if figax == 'default':
+            fig, axes = plt.subplots(nrows=ndim,ncols=ndim)
+        else:
+            fig,axes = figax
 
 #        pp=PdfPages('x.pdf')
-        ndim=x.shape[1]-1
-        fig, axes = plt.subplots(nrows=ndim,ncols=ndim)
         for i in xrange(axes.shape[0]):
             for j in xrange(axes.shape[1]):
                 axes[i,j].set_visible(False)
@@ -94,9 +112,10 @@ class Plots:
         for ic in xrange(ndim):
             for ir in xrange(ic,ndim):
                 axes[ir,ic].set_visible(True)
-                axes[ir,ic].scatter(x[good,ic],x[good,ir+1],s=2,marker='.',color='blue',alpha=0.025,label='low bias')
-                if notgood.sum() > 0:
-                    axes[ir,ic].scatter(x[notgood,ic],x[notgood,ir+1],s=2,marker='.',color='red',alpha=0.025,label='high bias')
+                axes[ir,ic].scatter(x[:,ic],x[:,ir+1],**kwargs)
+#                axes[ir,ic].scatter(x[good,ic],x[good,ir+1],s=2,marker='.',alpha=0.025,label='low bias')
+#                if notgood.sum() > 0:
+#                    axes[ir,ic].scatter(x[notgood,ic],x[notgood,ir+1],s=2,marker='.',color='red',alpha=0.025,label='high bias')
                 axes[ir,ic].legend(prop={'size':6})
                 if xlabel is not None:
                     if ic==0:
@@ -455,18 +474,22 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
+    x0 = numpy.array([0.02,0.005])
+
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
-#    plt.clf()
-#    Plots.x(dmsys.data.x,good=numpy.abs(train_data.y)< 0.01, xlabel=train_data.xlabel)
-#    plt.savefig('x.pdf')
-    x0 = numpy.array([0.01,0.001])
+ #   plt.clf()
+ #   Plots.data(dmsys.data,x0)
+ #   plt.savefig('x.pdf')
+#    wef
     dmsys.create_dm(x0)
-    Plots.falseDiffusionMap(dmsys.dm[0]['dm'])
-
+    plt.clf()
+    Plots.falseDiffusionMap(dmsys,x0)
+    plt.savefig('fdm.pdf')
+    wef
 
     # the calculation of the weighted bias
     wb = WeightedBias(dmsys, rs)

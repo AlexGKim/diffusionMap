@@ -62,14 +62,29 @@ class Plots:
         pp.close()
 
     @staticmethod
+    def falseDiffusionMap(dm):
+        ndim=4
+        pp=PdfPages('baddm.pdf')
+        print dm.dmap['X'][:,0].min(), dm.dmap['X'][:,0].max()
+        print dm.dmap['X'][:,1].min(), dm.dmap['X'][:,1].max()
+        print dm.dmap['X'][:,2].min(), dm.dmap['X'][:,2].max()
+        print dm.dmap['X'][:,3].min(), dm.dmap['X'][:,3].max()
+        fwe
+        plt.clf()
+        Plots.x(dm.dmap['X'][:,xrange(ndim)])
+        pp.savefig()
+        pp.close()
+        dwe
+
+        
+    @staticmethod
     def x(x,good='default',xlabel=None):
         if good == 'default':
             good=numpy.empty(x.shape[0],dtype='bool')
             good.fill(True)
         notgood = numpy.logical_not(good)
 
-        plt.clf()
-        pp=PdfPages('x.pdf')
+#        pp=PdfPages('x.pdf')
         ndim=x.shape[1]-1
         fig, axes = plt.subplots(nrows=ndim,ncols=ndim)
         for i in xrange(axes.shape[0]):
@@ -92,9 +107,9 @@ class Plots:
                     axes[ir,ic].get_yaxis().set_visible(False)
                 if ir !=ndim-1:
                     axes[ir,ic].get_xaxis().set_visible(False)
-        pp.savefig()
-        pp.close()
-        wfe
+#        pp.savefig()
+#        pp.close()
+#        wfe
 
         
 
@@ -442,17 +457,19 @@ if __name__ == '__main__':
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
-#    Plots.x(train_data.x,good=numpy.abs(train_data.y)< 0.01, xlabel=train_data.xlabel)
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
-    x0 = numpy.array([0.01,0.0001])
-#    dmsys.create_dm(x0)
-#    dmsys.train()
+#    plt.clf()
+#    Plots.x(dmsys.data.x,good=numpy.abs(train_data.y)< 0.01, xlabel=train_data.xlabel)
+#    plt.savefig('x.pdf')
+    x0 = numpy.array([0.01,0.001])
+    dmsys.create_dm(x0)
+    Plots.falseDiffusionMap(dmsys.dm[0]['dm'])
+
 
     # the calculation of the weighted bias
     wb = WeightedBias(dmsys, rs)
-
     # optimization
 #    t=train(wb)
 #    Plots.diffusionMaps(dmsys)

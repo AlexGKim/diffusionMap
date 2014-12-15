@@ -67,7 +67,7 @@ class Plots:
 
     @staticmethod
     def falseDiffusionMap(dmsys,x0):
-        alpha=0.01
+        alpha=0.025
         s=5
         ndim=4
         dm=dmsys.dm[0]['dm']
@@ -75,14 +75,16 @@ class Plots:
         plt.figure(num=1,figsize=(8,6))
         figax = plt.subplots(nrows=ndim-1,ncols=ndim-1)
         x = dm.transform(goodx)
-#        Plots.x(x[:,xrange(ndim)],figax=figax,label='low bias',color='k',alpha=alpha,s=s)
-        Plots.x(dm.dmap['X'][:,xrange(ndim)],figax=figax,label='high bias',color='b',alpha=0.025,s=s)
+        hasanalog=DMSystem.hasTrainingAnalog(x)
+        Plots.x(x[:,xrange(ndim)],figax=figax,label='low bias',color='g',alpha=alpha,s=s)
+        Plots.x(dm.dmap['X'][:,xrange(ndim)],figax=figax,label='high bias: Pop 1',color='b',s=s,alpha=alpha)
         w=split(dm.data.x)
         w=numpy.logical_and(w,  numpy.abs(dm.data.y) > x0[0])
         dum = dm.dmap['X'][:,xrange(ndim)]
  #       print w.sum(), len(w),dum.shape
 
-        Plots.x(dum[w,:],figax=figax,label='high bias',color='r',alpha=0.025,s=s)
+        Plots.x(dum[w,:],figax=figax,label='high bias: Pop 2',color='r',s=s,alpha=alpha)
+
         for ic in xrange(ndim-1):
             for ir in xrange(ic,ndim-1):
                 l = len(dm.dmap['X'][:,ic])
@@ -93,9 +95,9 @@ class Plots:
                 xl = numpy.sort(dm.dmap['X'][:,ir+1])
                 ymn = xl[int(l*.5)]
                 ysd = xl[int(l*.05):int(l*.95)].std()
-                #print xmn,xsd,ymn,ysd
-                figax[1][ir,ic].set_xlim(xmn-7*xsd,xmn+7*xsd)
-                figax[1][ir,ic].set_ylim(ymn-7*ysd,ymn+7*ysd)
+
+                figax[1][ir,ic].set_xlim(xmn-10*xsd,xmn+50*xsd)
+                figax[1][ir,ic].set_ylim(ymn-10*ysd,ymn+50*ysd)
 
     @staticmethod
     def data(data,par,**kwargs):
@@ -107,10 +109,9 @@ class Plots:
         figax = plt.subplots(nrows=ndim-1,ncols=ndim-1)
 #        print (numpy.abs(data.y) > par[0]).sum()
         Plots.x(data.x[numpy.abs(data.y) <= par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='g',label='low bias',xlabel=data.xlabel)
-        Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='c',label='high bias',xlabel=data.xlabel)
+        Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='b',label='high bias: Pop 1',xlabel=data.xlabel)
         w = numpy.logical_and(split(data.x), numpy.abs(data.y) > par[0])
-        Plots.x(data.x[w,:],figax=figax,alpha=alpha,s=s,marker=marker, color='r',xlabel=data.xlabel)
-
+        Plots.x(data.x[w,:],figax=figax,alpha=alpha,s=s,marker=marker, label='hight bias: Pop 2',color='r',xlabel=data.xlabel)
 
 
     @staticmethod
@@ -266,6 +267,8 @@ class DiffusionMap:
        self.data = data
        self.par = par  #for the moment eps_val
        self.key=label
+       self.weight= numpy.array([5,5,1,1])
+
 
     def make_map(self):
 
@@ -278,7 +281,8 @@ class DiffusionMap:
         kwargs['t']=1
         kwargs['delta']=1e-8
         kwargs['var']=0.95
-        self.dmap = diffuse.diffuse(self.data.x, **kwargs)
+
+        self.dmap = diffuse.diffuse(self.data.x*self.weight,**kwargs)
 
     def transform(self, x):
 
@@ -295,7 +299,7 @@ class DiffusionMap:
           DM coordinates for a set of points
         """
 
-        return diffuse.nystrom(self.dmap, self.data.x, x)
+        return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)
 
     def plot(self,ax, oplot=False, **kwargs):
         X=self.dmap['X']
@@ -421,6 +425,7 @@ class WeightedBias:
     import sklearn
 
     def __init__(self, dmsys, random_state=10):
+        self.nuse=4
         self.dmsys = dmsys
         self.random_state = random_state
         import sklearn.ensemble
@@ -432,16 +437,20 @@ class WeightedBias:
 
         ok = DMSystem.hasTrainingAnalog(dmcoords)
 
-        self.classifier.fit(dmcoords[ok,:], numpy.abs(y[ok]) <= par[0])
+        self.classifier.fit(dmcoords[ok,0:self.nuse], numpy.abs(y[ok]) <= par[0])
         self.dmcoords=dmcoords
         self.hasAnalog=ok
 #        return dmcoords, y
 
     def weighted_mean(self, dmcoords, y, par):
+        ok = DMSystem.hasTrainingAnalog(dmcoords)
+
         print self.classifier.classes_
         goodin=numpy.where(self.classifier.classes_)[0][0]
-        proba=self.classifier.predict_proba(dmcoords)[:,goodin]
-        ans = proba > 0.9
+        proba=self.classifier.predict_proba(dmcoords[ok,0:self.nuse])[ok,goodin]
+        ans=numpy.empty(len(y),dtype='bool')
+        ans.fill(True)
+        ans[ok] = proba > 0.9
 #        print goodin.shape, proba.shape,ans.shape 
 #        ans=self.classifier.predict(dmcoords)
         if numpy.sum(ans) == 0:
@@ -462,7 +471,6 @@ class WeightedBias:
         self.train(par)
         dmcoords = self.dmsys.coordinates(x_, par)
 
-        ok = DMSystem.hasTrainingAnalog(dmcoords)
         return self.weighted_mean(dmcoords[ok,:],y_[ok],par)
 
  
@@ -478,6 +486,9 @@ def train(wb):
     print ans
     return
 
+def colorClassify(data,par):
+    classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
+    classifier.fit(data.x, numpy.abs(data.y) <= par[0])
     
 if __name__ == '__main__':
 
@@ -490,7 +501,7 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([0.02,0.004])
+    x0 = numpy.array([0.02,0.005])
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
@@ -500,12 +511,12 @@ if __name__ == '__main__':
 #    plt.clf()
 #    Plots.data(dmsys.data,x0)
 #    plt.savefig('x.pdf')
-#    wef
+
     dmsys.create_dm(x0)
-    plt.clf()
-    Plots.falseDiffusionMap(dmsys,x0)
-    plt.savefig('fdm.pdf')
-    wef
+#    plt.clf()
+#    Plots.falseDiffusionMap(dmsys,x0)
+#    plt.savefig('fdm.pdf')
+#    wef
 
     # the calculation of the weighted bias
     wb = WeightedBias(dmsys, rs)

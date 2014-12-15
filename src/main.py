@@ -16,6 +16,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy
 from argparse import ArgumentParser
 import diffuse
+from scipy.stats import norm
 
 
 """
@@ -35,6 +36,9 @@ The parameters that are to be optimized
 """
 parameter_names =['bias_threshold','eps_val']
 
+def split(x):
+    #(0.8, 0.33), (1.1, 0.42)
+    return x[:,1] < 0.33 + (0.42-0.33)/(1.1-0.8)*(x[:,0]-0.8)
 
 class Plots:
     @staticmethod
@@ -63,40 +67,54 @@ class Plots:
 
     @staticmethod
     def falseDiffusionMap(dmsys,x0):
-        alpha=0.03
+        alpha=0.01
         s=5
         ndim=4
         dm=dmsys.dm[0]['dm']
         goodx=dmsys.data.x[numpy.abs(dmsys.data.y) <= x0[0]]
-#        print dm.dmap['X'][:,0].min(), dm.dmap['X'][:,0].max()
-#        print dm.dmap['X'][:,1].min(), dm.dmap['X'][:,1].max()
-#        print dm.dmap['X'][:,2].min(), dm.dmap['X'][:,2].max()
-#        print dm.dmap['X'][:,3].min(), dm.dmap['X'][:,3].max()
         plt.figure(num=1,figsize=(8,6))
         figax = plt.subplots(nrows=ndim-1,ncols=ndim-1)
         x = dm.transform(goodx)
-        Plots.x(x[:,xrange(ndim)],figax=figax,label='low bias',color='blue',alpha=alpha,s=s)
-        Plots.x(dm.dmap['X'][:,xrange(ndim)],figax=figax,label='high bias',color='red',alpha=alpha,s=s)
+#        Plots.x(x[:,xrange(ndim)],figax=figax,label='low bias',color='k',alpha=alpha,s=s)
+        Plots.x(dm.dmap['X'][:,xrange(ndim)],figax=figax,label='high bias',color='b',alpha=0.025,s=s)
+        w=split(dm.data.x)
+        w=numpy.logical_and(w,  numpy.abs(dm.data.y) > x0[0])
+        dum = dm.dmap['X'][:,xrange(ndim)]
+ #       print w.sum(), len(w),dum.shape
+
+        Plots.x(dum[w,:],figax=figax,label='high bias',color='r',alpha=0.025,s=s)
+        for ic in xrange(ndim-1):
+            for ir in xrange(ic,ndim-1):
+                l = len(dm.dmap['X'][:,ic])
+                #l = w.sum()
+                xl = numpy.sort(dm.dmap['X'][:,ic])
+                xmn = xl[int(l*.5)]
+                xsd = xl[int(l*.05):int(l*.95)].std()
+                xl = numpy.sort(dm.dmap['X'][:,ir+1])
+                ymn = xl[int(l*.5)]
+                ysd = xl[int(l*.05):int(l*.95)].std()
+                #print xmn,xsd,ymn,ysd
+                figax[1][ir,ic].set_xlim(xmn-7*xsd,xmn+7*xsd)
+                figax[1][ir,ic].set_ylim(ymn-7*ysd,ymn+7*ysd)
 
     @staticmethod
     def data(data,par,**kwargs):
-        alpha=0.03
+        alpha=0.01
         s=5
         marker='.'
         ndim=data.x.shape[1]
 
         figax = plt.subplots(nrows=ndim-1,ncols=ndim-1)
 #        print (numpy.abs(data.y) > par[0]).sum()
-        Plots.x(data.x[numpy.abs(data.y) <= par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='blue',label='low bias',xlabel=data.xlabel)
-        Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='red',label='high bias',xlabel=data.xlabel)
+        Plots.x(data.x[numpy.abs(data.y) <= par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='g',label='low bias',xlabel=data.xlabel)
+        Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='c',label='high bias',xlabel=data.xlabel)
+        w = numpy.logical_and(split(data.x), numpy.abs(data.y) > par[0])
+        Plots.x(data.x[w,:],figax=figax,alpha=alpha,s=s,marker=marker, color='r',xlabel=data.xlabel)
+
 
 
     @staticmethod
     def x(x,good='default',xlabel=None, figax='default',**kwargs):
- #       if good == 'default':
- #           good=numpy.empty(x.shape[0],dtype='bool')
- #           good.fill(True)
- #       notgood = numpy.logical_not(good)
 
         ndim=x.shape[1]-1
         if figax == 'default':
@@ -104,7 +122,7 @@ class Plots:
         else:
             fig,axes = figax
 
-#        pp=PdfPages('x.pdf')
+
         for i in xrange(axes.shape[0]):
             for j in xrange(axes.shape[1]):
                 axes[i,j].set_visible(False)
@@ -113,9 +131,9 @@ class Plots:
             for ir in xrange(ic,ndim):
                 axes[ir,ic].set_visible(True)
                 axes[ir,ic].scatter(x[:,ic],x[:,ir+1],**kwargs)
-#                axes[ir,ic].scatter(x[good,ic],x[good,ir+1],s=2,marker='.',alpha=0.025,label='low bias')
-#                if notgood.sum() > 0:
-#                    axes[ir,ic].scatter(x[notgood,ic],x[notgood,ir+1],s=2,marker='.',color='red',alpha=0.025,label='high bias')
+                
+
+                                            
                 axes[ir,ic].legend(prop={'size':6})
                 if xlabel is not None:
                     if ic==0:
@@ -126,9 +144,7 @@ class Plots:
                     axes[ir,ic].get_yaxis().set_visible(False)
                 if ir !=ndim-1:
                     axes[ir,ic].get_xaxis().set_visible(False)
-#        pp.savefig()
-#        pp.close()
-#        wfe
+
 
         
 
@@ -474,16 +490,16 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([0.02,0.005])
+    x0 = numpy.array([0.02,0.004])
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
- #   plt.clf()
- #   Plots.data(dmsys.data,x0)
- #   plt.savefig('x.pdf')
+#    plt.clf()
+#    Plots.data(dmsys.data,x0)
+#    plt.savefig('x.pdf')
 #    wef
     dmsys.create_dm(x0)
     plt.clf()

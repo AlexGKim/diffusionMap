@@ -17,6 +17,9 @@ import numpy
 from argparse import ArgumentParser
 import diffuse
 from scipy.stats import norm
+import sklearn
+import sklearn.ensemble
+
 
 
 """
@@ -96,12 +99,12 @@ class Plots:
                 ymn = xl[int(l*.5)]
                 ysd = xl[int(l*.05):int(l*.95)].std()
 
-                figax[1][ir,ic].set_xlim(xmn-10*xsd,xmn+50*xsd)
-                figax[1][ir,ic].set_ylim(ymn-10*ysd,ymn+50*ysd)
+                figax[1][ir,ic].set_xlim(xmn-20*xsd,xmn+20*xsd)
+                figax[1][ir,ic].set_ylim(ymn-20*ysd,ymn+20*ysd)
 
     @staticmethod
     def data(data,par,**kwargs):
-        alpha=0.01
+        alpha=0.025
         s=5
         marker='.'
         ndim=data.x.shape[1]
@@ -422,13 +425,10 @@ class DMSystem:
 
 class WeightedBias:
 
-    import sklearn
-
     def __init__(self, dmsys, random_state=10):
         self.nuse=4
         self.dmsys = dmsys
         self.random_state = random_state
-        import sklearn.ensemble
         self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
 
     def train(self,par):
@@ -445,9 +445,8 @@ class WeightedBias:
     def weighted_mean(self, dmcoords, y, par):
         ok = DMSystem.hasTrainingAnalog(dmcoords)
 
-        print self.classifier.classes_
         goodin=numpy.where(self.classifier.classes_)[0][0]
-        proba=self.classifier.predict_proba(dmcoords[ok,0:self.nuse])[ok,goodin]
+        proba=self.classifier.predict_proba(dmcoords[ok,0:self.nuse])[:,goodin]
         ans=numpy.empty(len(y),dtype='bool')
         ans.fill(True)
         ans[ok] = proba > 0.9
@@ -486,10 +485,23 @@ def train(wb):
     print ans
     return
 
-def colorClassify(data,par):
-    classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
-    classifier.fit(data.x, numpy.abs(data.y) <= par[0])
-    
+def colorClassify(train_data,test_data,par):
+    classifier = sklearn.ensemble.RandomForestClassifier(random_state=10)
+    classifier.fit(train_data.x, numpy.abs(train_data.y) <= par[0])
+    goodin=numpy.where(classifier.classes_)[0][0]
+    proba=classifier.predict_proba(test_data.x)[:,goodin]
+ #   ans=numpy.empty(len(test_data.y),dtype='bool')
+ #   ans.fill(True)
+    ans = proba > 0.9
+    if numpy.sum(ans) == 0:
+        raise Exception("No passing objects")
+    else:
+        res= numpy.mean(test_data.y[ans])
+        print res, test_data.y[ans].std(), numpy.sum(ans),
+        res = res**2/numpy.sum(ans)
+        print res
+        return res
+
 if __name__ == '__main__':
 
     parser = ArgumentParser()
@@ -505,13 +517,20 @@ if __name__ == '__main__':
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
+    print test_data.y.mean(), test_data.y.std(), len(test_data.y)
+
+    colorClassify(train_data, test_data, x0)
+
+    wfe
+
+
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
 #    plt.clf()
 #    Plots.data(dmsys.data,x0)
 #    plt.savefig('x.pdf')
-
+#    we
     dmsys.create_dm(x0)
 #    plt.clf()
 #    Plots.falseDiffusionMap(dmsys,x0)

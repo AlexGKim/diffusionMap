@@ -45,12 +45,12 @@ def split(x):
 
 class Plots:
     @staticmethod
-    def diffusionMaps(dmsystem,x0):
+    def diffusionMaps(dmsystem,x0,nsig=20):
         dmz = [dm['zbin'] for dm in dmsystem.dm]
         dmb = [dm['bias'] for dm in dmsystem.dm]
         zs = numpy.unique(dmz)
 
-        pp = PdfPages('dm.pdf')
+#        pp = PdfPages('dm.pdf')
         figax=[]
         for z in zs:
             wg=numpy.where(numpy.logical_and(dmz == z,[b==True for b in dmb]))[0]
@@ -60,11 +60,11 @@ class Plots:
                 #fig=plt.figure()
                 #ax = fig.add_subplot(111, projection='3d')
                 if b:
-                    figax.append(Plots.oneDiffusionMap(dmsystem,wg,x0))
+                    figax.append(Plots.oneDiffusionMap(dmsystem,wg,x0,nsig=nsig))
 #                    dmsystem.dm[wg]['dm'].plot(ax,marker='D',c='b')
 #                    dmsystem.dm[wg]['dm'].plot_external(ax,dmsystem.dm[wb]['dm'].data.x,marker='^',c='r',oplot=True)
                 else:
-                    figax.append(Plots.oneDiffusionMap(dmsystem, wb, x0))
+                    figax.append(Plots.oneDiffusionMap(dmsystem, wb, x0,nsig=nsig))
 #                    dmsystem.dm[wb]['dm'].plot(ax,marker='^',c='r')
 #                    dmsystem.dm[wb]['dm'].plot_external(ax,dmsystem.dm[wg]['dm'].data.x,marker='D',c='b',oplot=True)
 #                plt.title(str(z)+" "+str(b))
@@ -73,7 +73,7 @@ class Plots:
         return figax
 
     @staticmethod
-    def oneDiffusionMap(dmsys,ind, x0):
+    def oneDiffusionMap(dmsys,ind, x0,nsig=20):
         alpha=0.025
         s=5
         ndim=4
@@ -113,8 +113,8 @@ class Plots:
                 ymn = xl[int(l*.5)]
                 ysd = xl[int(l*.05):int(l*.95)].std()
 
-                figax[1][ir,ic].set_xlim(xmn-20*xsd,xmn+20*xsd)
-                figax[1][ir,ic].set_ylim(ymn-20*ysd,ymn+20*ysd)
+                figax[1][ir,ic].set_xlim(xmn-nsig*xsd,xmn+nsig*xsd)
+                figax[1][ir,ic].set_ylim(ymn-nsig*ysd,ymn+nsig*ysd)
 
         return figax
 
@@ -127,7 +127,7 @@ class Plots:
 
         figax = plt.subplots(nrows=ndim-1,ncols=ndim-1,figsize=(8,6)
 )
-#        print (numpy.abs(data.y) > par[0]).sum()
+
         Plots.x(data.x[numpy.abs(data.y) <= par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='g',label='low bias',xlabel=data.xlabel)
         Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='b',label='high bias: Pop 1',xlabel=data.xlabel)
         w = numpy.logical_and(split(data.x), numpy.abs(data.y) > par[0])
@@ -287,7 +287,7 @@ class DiffusionMap:
        self.data = data
        self.par = par  #for the moment eps_val
        self.key=label
-       self.weight= numpy.array([5,5,1,1])
+       self.weight= numpy.array([2,2,1,1])
 
 
     def make_map(self):
@@ -370,7 +370,6 @@ class DMSystem:
 
     def _onebad(self, good_inds, bad_inds, par):
         self.dm=[]
-
         key = dict()
         newmap=DiffusionMap(self.data[bad_inds],par[1],key)
         key['dm']=newmap
@@ -420,22 +419,20 @@ class DMSystem:
                 self.dm.append(key)
 
     def create_dm(self, par):
+
         if numpy.array_equal(self.state,par):
             return
-
         bias = self.data.y
 
     # Split into "good" and "bad" samples
         good_inds = numpy.abs(bias) <= par[0]
         bad_inds = numpy.logical_not(good_inds)
-
         self.config(good_inds, bad_inds, par)
 
 
         for dm in self.dm:
             dm['dm'].make_map()
-
-        self.state = par
+        self.state = numpy.array(par)
 
     def coordinates(self, x, par):
 
@@ -510,6 +507,8 @@ def train(wb):
     return
 
 def colorClassify(train_data,test_data,par):
+    ans = scipy.optimize.brute(fun,((0.01,0.04),(5e-4,3e-2)),finish=None)
+    n_estimators=20, max_features=[2,8]
     classifier = sklearn.ensemble.RandomForestClassifier(random_state=10)
     classifier.fit(train_data.x, numpy.abs(train_data.y) <= par[0])
     goodin=numpy.where(classifier.classes_)[0][0]
@@ -535,7 +534,7 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([0.02,0.005])
+    x0 = numpy.array([0.02,0.004])
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
@@ -550,17 +549,18 @@ if __name__ == '__main__':
 #    Plots.data(dmsys.data,x0)
 #    plt.savefig('x.pdf')
 #    we
-    dmsys.create_dm(x0)
-#    plt.clf()
-#    figax=Plots.oneDiffusionMap(dmsys,0,x0)
+    for x01 in [0.0025]:
+        x0[1]=x01
+        dmsys.create_dm(x0)
+        plt.clf()
+ #   figax=Plots.oneDiffusionMap(dmsys,0,x0)
 #    plt.savefig('temp.pdf')
-#    wefw
-#    pp = PdfPages('dms.pdf')
-#    figax=Plots.diffusionMaps(dmsys,x0)
-#    pp.savefig(figax[0][0])
-#    pp.savefig(figax[1][0])
-#    pp.close()
-#    wf
+        pp = PdfPages('dms.blowup.'+str(x01)+'.pdf')
+        figax=Plots.diffusionMaps(dmsys,x0,nsig=5)
+        pp.savefig(figax[0][0])
+        pp.savefig(figax[1][0])
+        pp.close()
+    wfe
     # the calculation of the weighted bias
     wb = WeightedBias(dmsys, rs)
     # optimization

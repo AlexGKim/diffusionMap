@@ -16,6 +16,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy
 from argparse import ArgumentParser
 import diffuse
+import scipy
 from scipy.stats import norm
 import sklearn
 import sklearn.ensemble
@@ -132,28 +133,26 @@ class Plots:
         Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='b',label='high bias: Pop 1',xlabel=data.xlabel)
         w = numpy.logical_and(split(data.x), numpy.abs(data.y) > par[0])
         Plots.x(data.x[w,:],figax=figax,alpha=alpha,s=s,marker=marker, label='hight bias: Pop 2',color='r',xlabel=data.xlabel)
+        return figax
 
 
     @staticmethod
-    def x(x,good='default',xlabel=None, figax='default',**kwargs):
+    def x(x,xlabel=None, figax='default',**kwargs):
 
         ndim=x.shape[1]-1
         if figax == 'default':
             fig, axes = plt.subplots(nrows=ndim,ncols=ndim)
+            for i in xrange(axes.shape[0]):
+                for j in xrange(axes.shape[1]):
+                    axes[i,j].set_visible(False)
         else:
             fig,axes = figax
 
-
-        for i in xrange(axes.shape[0]):
-            for j in xrange(axes.shape[1]):
-                axes[i,j].set_visible(False)
 
         for ic in xrange(ndim):
             for ir in xrange(ic,ndim):
                 axes[ir,ic].set_visible(True)
                 axes[ir,ic].scatter(x[:,ic],x[:,ir+1],**kwargs)
-                
-
                                             
                 axes[ir,ic].legend(prop={'size':6})
                 if xlabel is not None:
@@ -165,9 +164,8 @@ class Plots:
                     axes[ir,ic].get_yaxis().set_visible(False)
                 if ir !=ndim-1:
                     axes[ir,ic].get_xaxis().set_visible(False)
-
-
         
+        return fig, axes
 
 
 class Data:
@@ -288,6 +286,7 @@ class DiffusionMap:
        self.par = par  #for the moment eps_val
        self.key=label
        self.weight= numpy.array([2,2,1,1])
+       self.nvar = 4
 
 
     def make_map(self):
@@ -319,7 +318,7 @@ class DiffusionMap:
           DM coordinates for a set of points
         """
 
-        return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)
+        return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)[:,0:self.nvar]
 
     def plot(self,ax, oplot=False, **kwargs):
         X=self.dmap['X']
@@ -448,11 +447,19 @@ class DMSystem:
 
 class WeightedBias:
 
-    def __init__(self, dmsys, random_state=10):
-        self.nuse=4
+    def __init__(self, dmsys, par, random_state=10):
+        self.nuse=8
         self.dmsys = dmsys
         self.random_state = random_state
-        self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
+
+        dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
+        y = numpy.array(self.dmsys.data.y)
+
+        ok = DMSystem.hasTrainingAnalog(dmcoords)
+
+        self.co = ClassifyOptimize(dmcoords[ok,0:self.nuse], numpy.abs(y[ok]),par)
+
+#        self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
 
     def train(self,par):
         dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
@@ -506,22 +513,49 @@ def train(wb):
     print ans
     return
 
-def colorClassify(train_data,test_data,par):
-    ans = scipy.optimize.brute(fun,((0.01,0.04),(5e-4,3e-2)),finish=None)
-    n_estimators=20, max_features=[2,8]
-    classifier = sklearn.ensemble.RandomForestClassifier(random_state=10)
-    classifier.fit(train_data.x, numpy.abs(train_data.y) <= par[0])
-    goodin=numpy.where(classifier.classes_)[0][0]
-    proba=classifier.predict_proba(test_data.x)[:,goodin]
-    ans = proba > 0.9
-    if numpy.sum(ans) == 0:
-        raise Exception("No passing objects")
-    else:
-        res= numpy.mean(test_data.y[ans])
-        print res, test_data.y[ans].std(), numpy.sum(ans),
-        res = res**2/numpy.sum(ans)
-        print res
-        return res
+class ClassifyOptimize:
+    def __init__(self,train_data_x,train_data_y, par, ranges=((2,8),) ,Ns=7):
+        self.pthresh=0.9
+        self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=11,n_estimators=100)
+        self.train_data_x=train_data_x
+        self.train_data_y=train_data_y
+        self.par = par
+        fun = self.objective
+        ans = scipy.optimize.brute(fun,ranges=ranges,Ns=Ns,finish=None)
+        self.setup_classifier(ans)
+
+    def objective(self,x):
+        self.setup_classifier(x)
+        proba = self.predict(self.train_data_x)
+        ans = proba > self.pthresh
+        if numpy.sum(ans) == 0:
+            raise Exception("No passing objects")
+        else:
+            res= numpy.mean(self.train_data_y[ans])
+            return res
+
+    def metrics(self,x,y):
+        proba=self.predict(x)
+        ans = proba > self.pthresh
+        if numpy.sum(ans) == 0:
+            raise Exception("No passing objects")
+        else:
+            res= numpy.mean(y[ans])
+            print res, y[ans].std(), numpy.sum(ans),
+            res = res**2/numpy.sum(ans)
+            print res
+            return ans
+
+    def setup_classifier(self,x):
+        params = dict()
+        params['max_features'] = int(x)
+        self.classifier.set_params(**params)
+        self.classifier.fit(self.train_data_x, numpy.abs(self.train_data_y) <= self.par[0])
+
+    def predict(self,x):
+        goodin=numpy.where(self.classifier.classes_)[0][0]
+        proba=self.classifier.predict_proba(x)[:,goodin]
+        return proba 
 
 if __name__ == '__main__':
 
@@ -540,33 +574,43 @@ if __name__ == '__main__':
     train_data, test_data = manage_data(pdict['test_size'],rs)
     print test_data.y.mean(), test_data.y.std(), len(test_data.y)
 
-    colorClassify(train_data, test_data, x0)
+    co = ClassifyOptimize(train_data.x,train_data.y,x0,ranges=((2,4),),Ns=3)
+    classify = co.metrics(test_data.x,test_data.y)
+    print classify.shape, classify.sum()
 
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
-#    plt.clf()
-#    Plots.data(dmsys.data,x0)
-#    plt.savefig('x.pdf')
-#    we
+    plt.clf()
+    alpha=0.05
+    s=5
+#    figax= Plots.data(dmsys.data,x0)
+    figax=Plots.x(train_data.x[classify],color='g',label='class low',alpha=alpha,s=s)
+    Plots.x(train_data.x[numpy.logical_not(classify)],color='r',label='class high',alpha=alpha,s=s,figax=figax)
+    plt.savefig('x_class.pdf')
+
+    fwe
     for x01 in [0.0025]:
         x0[1]=x01
         dmsys.create_dm(x0)
-        plt.clf()
- #   figax=Plots.oneDiffusionMap(dmsys,0,x0)
-#    plt.savefig('temp.pdf')
-        pp = PdfPages('dms.blowup.'+str(x01)+'.pdf')
-        figax=Plots.diffusionMaps(dmsys,x0,nsig=5)
-        pp.savefig(figax[0][0])
-        pp.savefig(figax[1][0])
-        pp.close()
-    wfe
+        
+#        plt.clf()
+#        pp = PdfPages('dms.blowup.'+str(x01)+'.pdf')
+#        figax=Plots.diffusionMaps(dmsys,x0,nsig=5)
+#        pp.savefig(figax[0][0])
+#        pp.savefig(figax[1][0])
+#        pp.close()
+#    wfe
+        
     # the calculation of the weighted bias
-    wb = WeightedBias(dmsys, rs)
+        wb = WeightedBias(dmsys, x0, rs)
+        tx = dmsys.coordinates(test_data.x, x0)
+        print tx.shape
+        wb.co.metrics(tx,test_data.y)
     # optimization
 #    t=train(wb)
 #    Plots.diffusionMaps(dmsys)
-    wb.value_external(test_data.x, test_data.y, x0)
+ #   wb.value_external(test_data.x, test_data.y, x0)
 #    pickle.dump([t,dmsys], open("trained_dmsystem.pkl","wb"))
 
     shit

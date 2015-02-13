@@ -120,23 +120,6 @@ class Plots:
         return figax
 
     @staticmethod
-    def data(data,par,**kwargs):
-        alpha=0.025
-        s=5
-        marker='.'
-        ndim=data.x.shape[1]
-
-        figax = plt.subplots(nrows=ndim-1,ncols=ndim-1,figsize=(8,6)
-)
-
-        Plots.x(data.x[numpy.abs(data.y) <= par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='g',label='low bias',xlabel=data.xlabel)
-        Plots.x(data.x[numpy.abs(data.y) > par[0],:],figax=figax,alpha=alpha,s=s,marker=marker, color='b',label='high bias: Pop 1',xlabel=data.xlabel)
-        w = numpy.logical_and(split(data.x), numpy.abs(data.y) > par[0])
-        Plots.x(data.x[w,:],figax=figax,alpha=alpha,s=s,marker=marker, label='hight bias: Pop 2',color='r',xlabel=data.xlabel)
-        return figax
-
-
-    @staticmethod
     def x(x,xlabel=None, figax='default',**kwargs):
 
         ndim=x.shape[1]-1
@@ -199,10 +182,39 @@ class Data:
     def lessthan(self, thresh):
         return self.y < thresh
 
-    def plot(self):
-        import triangle
-        figure  = triangle.corner(self.x)
-        return figure
+#    def plot(self):
+#        import triangle
+#        figure  = triangle.corner(self.x)
+ #       return figure
+
+    def output(self,filename):
+       f=open(filename,'w')
+       for a,b in zip(self.x, self.y):
+          f.write('{} {} {} {} {}\n'.format(a[0],a[1],a[2],a[3],b))
+       f.close()
+
+    def stats(self):
+        print self.y.mean(), self.y.std(), len(self.y)
+
+    def plot(self,logic=None,**kwargs):
+ 
+        if logic is None:
+            logic = lambda x : numpy.logical_not(numpy.zeros(len(self.x),dtype='b'))
+
+        if 'xlabel' not in kwargs:
+            kwargs['xlabel']= self.xlabel
+
+        if 'alpha' not in kwargs:
+            kwargs['alpha']= 0.025
+
+        if 's' not in kwargs:
+            kwargs['s']=5
+
+        if 'marker' not in kwargs:
+            kwargs['marker']= '.'
+
+        figax = Plots.x(self.x[logic(self),:], **kwargs)
+        return figax
 
 """ Method that reads in input data, selects those appropriate for
     training and testing, and creates training and test subsets.
@@ -515,7 +527,7 @@ def train(wb):
 
 class ClassifyOptimize:
     def __init__(self,train_data_x,train_data_y, par, ranges=((2,8),) ,Ns=7):
-        self.pthresh=0.9
+        self.pthresh=0.99
         self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=11,n_estimators=100)
         self.train_data_x=train_data_x
         self.train_data_y=train_data_y
@@ -572,24 +584,30 @@ if __name__ == '__main__':
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
-    print test_data.y.mean(), test_data.y.std(), len(test_data.y)
+
+    #plot data
+    # figax = train_data.plot(lambda x : numpy.abs(x.y) <= x0[0],label='low bias',color='g')
+    # train_data.plot(lambda x : numpy.abs(x.y) > x0[0],label='high bias',color='r',figax=figax)
+    # w = numpy.logical_and(split(train_data.x), numpy.abs(train_data.y) > x0[0])
+    # train_data.plot(lambda x: w, label='hight bias: Pop 2',color='r',figax=figax)
+    # plt.show()
 
     co = ClassifyOptimize(train_data.x,train_data.y,x0,ranges=((2,4),),Ns=3)
     classify = co.metrics(test_data.x,test_data.y)
-    print classify.shape, classify.sum()
 
+    #plot how well calssification works on test data
+
+    wefwef
 
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
-    plt.clf()
-    alpha=0.05
-    s=5
-#    figax= Plots.data(dmsys.data,x0)
-    figax=Plots.x(train_data.x[classify],color='g',label='class low',alpha=alpha,s=s)
-    Plots.x(train_data.x[numpy.logical_not(classify)],color='r',label='class high',alpha=alpha,s=s,figax=figax)
-    plt.savefig('x_class.pdf')
+#    plt.clf()
+#    alpha=0.05
+#    s=5
+#    figax=Plots.x(train_data.x[numpy.logical_not(classify)],color='r',label='class high',alpha=alpha,s=s)
+#    Plots.x(train_data.x[classify],color='g',label='class low',alpha=alpha*2,s=s,figax=figax)
+#    plt.savefig('x_class.pdf')
 
-    fwe
     for x01 in [0.0025]:
         x0[1]=x01
         dmsys.create_dm(x0)
@@ -600,13 +618,40 @@ if __name__ == '__main__':
 #        pp.savefig(figax[0][0])
 #        pp.savefig(figax[1][0])
 #        pp.close()
-#    wfe
-        
+##    wfe
+        dmx=dmsys.coordinates(train_data.x, x0)
+        plt.clf()
+        plt.plot(dmx[0],dmx[1],'.')
+        plt.show()
+        fwe
+        # f=open('train.txt','w')
+        # for a,b in zip(dmx,train_data.y):
+        #      for a_ in a:
+        #         f.write("{} ".format(a_))
+        #      f.write("{}\n".format(b))
+        # f.close()
+        # dum=dmsys.coordinates(test_data.x,x0)
+        # f=open('test.txt','w')
+        # for a,b in zip(dum,test_data.y):
+        #      for a_ in a:
+        #         f.write("{} ".format(a_))
+        #      f.write("{}\n".format(b))
+        # f.close()
+        # fwe
+        co = ClassifyOptimize(dmx,train_data.y,x0)
+        classify = co.metrics(dmsys.coordinates(test_data.x,x0),test_data.y)
+        plt.clf()
+        alpha=0.05
+        s=5
+        figax=Plots.x(train_data.x[numpy.logical_not(classify)],color='r',label='class high',alpha=alpha,s=s)
+        Plots.x(train_data.x[classify],color='g',label='class low',alpha=alpha*2,s=s,figax=figax)
+        plt.savefig('x_class_test.pdf')
+        wef 
     # the calculation of the weighted bias
         wb = WeightedBias(dmsys, x0, rs)
         tx = dmsys.coordinates(test_data.x, x0)
-        print tx.shape
-        wb.co.metrics(tx,test_data.y)
+        classify=wb.co.metrics(tx,test_data.y)
+
     # optimization
 #    t=train(wb)
 #    Plots.diffusionMaps(dmsys)

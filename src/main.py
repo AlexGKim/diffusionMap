@@ -8,10 +8,9 @@ __author__ = 'Alex Kim <agkim@lbl.gov>'
 
 import pickle
 #import numpy as np
-import matplotlib
+#import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.mplot3d import Axes3D
 import numpy
 from argparse import ArgumentParser
@@ -21,7 +20,8 @@ from scipy.stats import norm
 import sklearn
 import sklearn.ensemble
 from matplotlib.backends.backend_pdf import PdfPages
-
+import matplotlib as mpl
+mpl.rc('figure', figsize=(11,11))
 
 """
 For the moment, the redshift range that we consider are set as global
@@ -120,7 +120,7 @@ class Plots:
         return figax
 
     @staticmethod
-    def x(x,xlabel=None, figax='default',**kwargs):
+    def x(x,xlabel=None, figax='default',nsig=None,**kwargs):
 
         ndim=x.shape[1]-1
         if figax == 'default':
@@ -147,6 +147,20 @@ class Plots:
                     axes[ir,ic].get_yaxis().set_visible(False)
                 if ir !=ndim-1:
                     axes[ir,ic].get_xaxis().set_visible(False)
+
+                if nsig is not None:
+                    l = len(x[:,ic])
+                    #l = w.sum()
+                    xl = numpy.sort(x[:,ic])
+                    xmn = xl[int(l*.5)]
+                    xsd = xl[int(l*.05):int(l*.95)].std()
+                    xl = numpy.sort(x[:,ir+1])
+                    ymn = xl[int(l*.5)]
+                    ysd = xl[int(l*.05):int(l*.95)].std()
+
+                    axes[ir,ic].set_xlim(xmn-nsig*xsd,xmn+nsig*xsd)
+                    axes[ir,ic].set_ylim(ymn-nsig*ysd,ymn+nsig*ysd)
+
         
         return fig, axes
 
@@ -214,7 +228,23 @@ class Data:
             kwargs['marker']= '.'
 
         figax = Plots.x(self.x[logic(self),:], **kwargs)
+
+
         return figax
+
+    def plotClassification(self,thresh, data_predict, **kwargs):
+        figax = self.plot(lambda x : numpy.logical_and(numpy.abs(x.y) <= thresh,data_predict),
+            label='low bias',color='b',alpha=0.1,s=20, **kwargs)
+        self.plot(lambda x : numpy.logical_and(numpy.abs(x.y) > thresh,data_predict),
+           label='high bias',color='r',alpha=0.1,s=20,figax=figax,**kwargs)
+        figax[0].suptitle('Classified True')
+
+        figax2 = self.plot(lambda x : numpy.logical_and(numpy.abs(x.y) <= thresh,numpy.logical_not(data_predict)),
+            label='low bias',color='b',alpha=0.1,s=20,**kwargs)
+        self.plot(lambda x : numpy.logical_and(numpy.abs(x.y) > thresh,numpy.logical_not(data_predict)),
+           label='high bias',color='r',alpha=0.1,s=20,figax=figax2,**kwargs)
+        figax2[0].suptitle('Classified False')
+        return figax,figax2
 
 """ Method that reads in input data, selects those appropriate for
     training and testing, and creates training and test subsets.
@@ -348,6 +378,9 @@ class DiffusionMap:
             ax.set_ylabel('X[1]')
             ax.set_zlabel('X[2]')
 
+    def internal_coordinates(self):
+        return self.dmap['X'][:,0:self.nvar]
+
 
 # New coordinate system is based on a set of diffusion maps
 class DMSystem:
@@ -386,6 +419,7 @@ class DMSystem:
         key['dm']=newmap
         key['bias']=False
         key['zbin']=0
+        key['train_inds'] = bad_inds
         self.dm.append(key)
 
         key = dict()
@@ -393,6 +427,7 @@ class DMSystem:
         key['dm']=newmap
         key['bias']=True
         key['zbin']=0
+        key['train_inds'] = good_inds
         self.dm.append(key)
 
         
@@ -438,12 +473,30 @@ class DMSystem:
     # Split into "good" and "bad" samples
         good_inds = numpy.abs(bias) <= par[0]
         bad_inds = numpy.logical_not(good_inds)
+        self.good_inds= good_inds
+        self.bad_inds=bad_inds
         self.config(good_inds, bad_inds, par)
 
+        ncoord = 0
+        for dm in self.dm:
+            ncoord = ncoord+dm['dm'].nvar
 
+        self.state = numpy.array(par)
+
+        train_coordinates = numpy.zeros((len(self.data.x),  ncoord))
+        # print train_coordinates.shape
+
+        # put the new coordinates into a data
+        ncoord=0
         for dm in self.dm:
             dm['dm'].make_map()
-        self.state = numpy.array(par)
+            train_coordinates[dm['train_inds'],ncoord:ncoord+dm['dm'].nvar]= \
+                dm['dm'].internal_coordinates()
+            train_coordinates[numpy.logical_not(dm['train_inds']),ncoord:ncoord+dm['dm'].nvar]= \
+                dm['dm'].transform(self.data.x[numpy.logical_not(dm['train_inds'])])
+            ncoord=ncoord+dm['dm'].nvar
+
+        self.dmdata = Data(train_coordinates,self.data.y,self.data.x)
 
     def coordinates(self, x, par):
 
@@ -571,6 +624,7 @@ class ClassifyOptimize:
 
 if __name__ == '__main__':
 
+    all = True
     parser = ArgumentParser()
     parser.add_argument('test_size', nargs='?',default=0.1)
     parser.add_argument('seed', nargs='?',default=9)
@@ -582,71 +636,68 @@ if __name__ == '__main__':
 
     x0 = numpy.array([0.02,0.004])
 
+    prob=0.9
+
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
 
     #plot data
-    # figax = train_data.plot(lambda x : numpy.abs(x.y) <= x0[0],label='low bias',color='g')
-    # train_data.plot(lambda x : numpy.abs(x.y) > x0[0],label='high bias',color='r',figax=figax)
-    # w = numpy.logical_and(split(train_data.x), numpy.abs(train_data.y) > x0[0])
-    # train_data.plot(lambda x: w, label='hight bias: Pop 2',color='r',figax=figax)
-    # plt.show()
+    if all:
+        pp = PdfPages('out.pdf')
+        figax=train_data.plot(lambda x: numpy.abs(train_data.y) <= x0[0] , label='low bias',color='b')
+       # w = numpy.logical_and(split(train_data.x), numpy.abs(train_data.y) > x0[0])                    
 
-    co = ClassifyOptimize(train_data.x,train_data.y,x0,ranges=((2,4),),Ns=3)
-    classify = co.metrics(test_data.x,test_data.y)
 
-    #plot how well calssification works on test data
+        train_data.plot(lambda x: numpy.abs(train_data.y) > x0[0] , label='high bias',color='r',figax=figax)
+        pp.savefig()
+        #plt.show()
 
-    wefwef
 
+    if all:
+        #plot how well calssification works on test data
+        co = ClassifyOptimize(train_data.x,train_data.y,x0,ranges=((2,4),),Ns=3)
+        data_prob = co.predict(test_data.x)
+        data_predict=data_prob > prob
+
+        print test_data.y[data_predict].mean(), test_data.y[data_predict].std(), data_predict.sum()
+        figax,figax2=test_data.plotClassification(x0[0],data_predict)
+        pp.savefig(figax[0])
+        pp.savefig(figax2[0])
+        #plt.show()
+
+    
     # the new coordinate system based on the training data
     dmsys= DMSystem(train_data)
-#    plt.clf()
-#    alpha=0.05
-#    s=5
-#    figax=Plots.x(train_data.x[numpy.logical_not(classify)],color='r',label='class high',alpha=alpha,s=s)
-#    Plots.x(train_data.x[classify],color='g',label='class low',alpha=alpha*2,s=s,figax=figax)
-#    plt.savefig('x_class.pdf')
 
     for x01 in [0.0025]:
         x0[1]=x01
         dmsys.create_dm(x0)
-        
-#        plt.clf()
-#        pp = PdfPages('dms.blowup.'+str(x01)+'.pdf')
-#        figax=Plots.diffusionMaps(dmsys,x0,nsig=5)
-#        pp.savefig(figax[0][0])
-#        pp.savefig(figax[1][0])
-#        pp.close()
-##    wfe
-        dmx=dmsys.coordinates(train_data.x, x0)
-        plt.clf()
-        plt.plot(dmx[0],dmx[1],'.')
-        plt.show()
-        fwe
-        # f=open('train.txt','w')
-        # for a,b in zip(dmx,train_data.y):
-        #      for a_ in a:
-        #         f.write("{} ".format(a_))
-        #      f.write("{}\n".format(b))
-        # f.close()
-        # dum=dmsys.coordinates(test_data.x,x0)
-        # f=open('test.txt','w')
-        # for a,b in zip(dum,test_data.y):
-        #      for a_ in a:
-        #         f.write("{} ".format(a_))
-        #      f.write("{}\n".format(b))
-        # f.close()
-        # fwe
-        co = ClassifyOptimize(dmx,train_data.y,x0)
-        classify = co.metrics(dmsys.coordinates(test_data.x,x0),test_data.y)
-        plt.clf()
-        alpha=0.05
-        s=5
-        figax=Plots.x(train_data.x[numpy.logical_not(classify)],color='r',label='class high',alpha=alpha,s=s)
-        Plots.x(train_data.x[classify],color='g',label='class low',alpha=alpha*2,s=s,figax=figax)
-        plt.savefig('x_class_test.pdf')
-        wef 
+
+        if all:
+            figax=dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) <= x0[0] , label='low bias',color='b',nsig=10)
+            dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) > x0[0] , label='high bias',color='r',figax=figax,nsig=10)
+            pp.savefig(figax[0])
+            
+        co = ClassifyOptimize(dmsys.dmdata.x,dmsys.dmdata.y,x0)
+        test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
+        data_prob = co.predict(test_data_dm.x)
+        data_predict=data_prob > prob
+
+        print test_data.y[data_predict].mean(), test_data.y[data_predict].std(), data_predict.sum()
+        if all:
+            figax,figax2=test_data_dm.plotClassification(x0[0],data_predict,nsig=10.)
+            # plt.show()
+            pp.savefig(figax[0])
+            pp.savefig(figax2[0])
+
+            figax,figax2=test_data.plotClassification(x0[0],data_predict,nsig=10.)
+            # plt.show()
+            pp.savefig(figax[0])
+            pp.savefig(figax2[0])
+
+            pp.close()
+        wef
+
     # the calculation of the weighted bias
         wb = WeightedBias(dmsys, x0, rs)
         tx = dmsys.coordinates(test_data.x, x0)

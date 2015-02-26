@@ -564,13 +564,21 @@ class MyRegressor(sklearn.ensemble.forest.ForestRegressor):
                  DeprecationWarning)
 
     def score(self,X, y, sample_weight=None):
+        return (self.score_info(X, y, sample_weight=sample_weight))[0]
+#         y_predict, y_var =self.predict(X)
+#         delta_y=y_predict-y
+#         sin = numpy.argsort(y_var)
+#         sin=sin[0:len(sin)*self.eval_frac]
+#         delta_y=delta_y[sin]
+#         return numpy.exp(-delta_y.std())
+
+    def score_info(self,X, y, sample_weight=None):
         y_predict, y_var =self.predict(X)
         delta_y=y_predict-y
         sin = numpy.argsort(y_var)
         sin=sin[0:len(sin)*self.eval_frac]
         delta_y=delta_y[sin]
-        return numpy.exp(-delta_y.std())
-
+        return numpy.exp(-delta_y.std()),sin
 
 class Objective(object):
     """docstring for Objective"""
@@ -579,18 +587,61 @@ class Objective(object):
         self.x = x
         self.y = y
         self.clf=MyRegressor(0.1)
+        self.frac_include  =  0.01*1.5**numpy.arange(12) #12
 
-    def eval(self,par):
+    def set_regressor(self,par):
         kwargs=dict()
         kwargs['n_estimators']=int(par[0])
         kwargs['max_features']=int(par[1])
         kwargs['min_samples_leaf']=int(par[2])
         kwargs['random_state']=int(par[3])
-        clf = self.clf.set_params(**kwargs)
-        scores = cross_val_score(clf, dmsys.dmdata.x,dmsys.dmdata.y, cv=5)
+        self.clf.set_params(**kwargs)
+
+    def eval(self,par):
+        # kwargs=dict()
+        # kwargs['n_estimators']=int(par[0])
+        # kwargs['max_features']=int(par[1])
+        # kwargs['min_samples_leaf']=int(par[2])
+        # kwargs['random_state']=int(par[3])
+        # clf=self.clf.set_params(**kwargs)
+        self.set_regressor(par)
+        scores = cross_val_score(self.clf, self.x, self.y, cv=5)
         score = -numpy.log(scores.mean())
         return score
-        
+
+    def optimize(self,**kwargs):
+    # the order of the variables
+    # n_estimators
+    # max_features
+    # min_samples_leaf
+    # seed
+        x0s = []
+        fvals = []
+        for frac in self.frac_include:
+            self.clf.eval_frac=frac
+            x0, fval, grid, jout = scipy.optimize.brute(self.eval,
+                finish=False,full_output=True, **kwargs)
+            x0s.append(x0)
+            fvals.append(fval)
+        self.x0s=numpy.array(x0s)
+        self.fvals=numpy.array(fvals)
+        return x0s, fvals
+
+    def plot_scatter(self,ax,**kwargs):
+        ax.scatter(self.frac_include,self.fvals,**kwargs)
+
+    def plot_scatter_external(self,ax,x,y,**kwargs):
+        test_score_color=[]
+        for ind in xrange(len(self.frac_include)):
+            self.set_regressor(self.x0s[ind])
+            self.clf.eval_frac=self.frac_include[ind]
+            self.clf.fit(self.x,self.y)
+            predict_color, sin = self.clf.score_info(x,y)
+            test_score_color.append(predict_color)
+        test_score_color=numpy.array(test_score_color)
+        test_score_color = -numpy.log(test_score_color)
+        ax.scatter(self.frac_include,test_score_color,**kwargs)
+
 if __name__ == '__main__':
 
     all = False
@@ -672,37 +723,48 @@ if __name__ == '__main__':
         pp.savefig(figax[0])
         
      
-    objective = Objective(dmsys.dmdata.x,dmsys.dmdata.y)
-    ## the order of the variables
-    # n_estimators
-    # max_features
-    # min_samples_leaf
-    # seed
 
     filename = 'optimum.pkl'
+
     if os.path.isfile(filename):
-#        print 'get pickle'
         pklfile=open(filename,'r')
-        (frac_include,x0s,fvals)=pickle.load(pklfile)
+        (objective_dm, objective_color)=pickle.load(pklfile)
     else:
-#        print 'make pickle'
-        frac_include  =  0.01*1.5**numpy.arange(12)
-        x0s = []
-        fvals = []
-        for frac in frac_include:
-            objective.clf.eval_frac=frac
-            x0, fval, grid, jout = scipy.optimize.brute(objective.eval,
-                ranges=(slice(10,60,5),slice(3,dmsys.nvar+1,1),slice(1,10,1),slice(0,10,1)),finish=False,
-                full_output=True)
-            x0s.append(x0)
-            fvals.append(fval)
-        x0s=numpy.array(x0s)
-        fvals=numpy.array(fvals)
+        objective_dm = Objective(dmsys.dmdata.x,dmsys.dmdata.y)
+        objective_color = Objective(train_data.x,train_data.y)
+        objective_dm.optimize(ranges=(slice(10,60,5),
+            slice(3,objective_dm.x.shape[1]+1,1),slice(1,10,1),slice(0,10,1)))
+        objective_color.optimize(ranges=(slice(10,60,5),
+            slice(3,objective_color.x.shape[1]+1,1),slice(1,10,1),slice(0,10,1)))
+ 
         pklfile=open(filename,'w')
-        pickle.dump((frac_include,x0s,fvals),pklfile)
+        pickle.dump((objective_dm, objective_color),pklfile)
     pklfile.close()
 
-     
+    if all:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.scatter(objective_dm.frac_include,optimum_dm[1],label='dm',color='b')
+        ax.scatter(objective_color.frac_include,optimum_color[1],label='color',color='r')
+        ax.legend()
+
+
+    test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
+    if all:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        objective_dm.plot_scatter(ax,label='dm',color='b')
+        objective_color.plot_scatter(ax,label='color',color='r')
+        ax.legend()
+
+    if all:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        objective_dm.plot_scatter_external(ax,test_data_dm.x,test_data_dm.y,label='dm',color='b')
+        objective_color.plot_scatter_external(ax,test_data.x,test_data.y,label='color',color='r')
+        ax.legend()
+        plt.show()
+
     # clf = clf.fit(dmsys.dmdata.x,dmsys.dmdata.y)
 
     # y_pred, y_var = clf.predict(dmsys.dmdata.x)
@@ -728,7 +790,7 @@ if __name__ == '__main__':
     # ax2.scatter(y_sig[predind[1:]],std,label='train')
 
 
-    # test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
+    # 
     # y_pred, y_var = clf.predict(test_data_dm.x)
     # y_sig=numpy.sqrt(y_var)
 

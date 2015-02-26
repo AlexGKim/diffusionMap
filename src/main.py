@@ -5,7 +5,7 @@ task.'''
 
 __author__ = 'Alex Kim <agkim@lbl.gov>'
 
-
+import os
 import pickle
 #import numpy as np
 #import matplotlib
@@ -18,6 +18,7 @@ import diffuse
 import scipy
 from scipy.stats import norm
 import sklearn
+from sklearn.cross_validation import cross_val_score
 import sklearn.ensemble
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
@@ -45,80 +46,6 @@ def split(x):
     return x[:,1] < 0.33 + (0.42-0.33)/(1.1-0.8)*(x[:,0]-0.8)
 
 class Plots:
-    @staticmethod
-    def diffusionMaps(dmsystem,x0,nsig=20):
-        dmz = [dm['zbin'] for dm in dmsystem.dm]
-        dmb = [dm['bias'] for dm in dmsystem.dm]
-        zs = numpy.unique(dmz)
-
-#        pp = PdfPages('dm.pdf')
-        figax=[]
-        for z in zs:
-            wg=numpy.where(numpy.logical_and(dmz == z,[b==True for b in dmb]))[0]
-            wb=numpy.where(numpy.logical_and(dmz == z,[b==False for b in dmb]))[0]
-            for b in [True, False]:
-                #plt.clf()
-                #fig=plt.figure()
-                #ax = fig.add_subplot(111, projection='3d')
-                if b:
-                    figax.append(Plots.oneDiffusionMap(dmsystem,wg,x0,nsig=nsig))
-#                    dmsystem.dm[wg]['dm'].plot(ax,marker='D',c='b')
-#                    dmsystem.dm[wg]['dm'].plot_external(ax,dmsystem.dm[wb]['dm'].data.x,marker='^',c='r',oplot=True)
-                else:
-                    figax.append(Plots.oneDiffusionMap(dmsystem, wb, x0,nsig=nsig))
-#                    dmsystem.dm[wb]['dm'].plot(ax,marker='^',c='r')
-#                    dmsystem.dm[wb]['dm'].plot_external(ax,dmsystem.dm[wg]['dm'].data.x,marker='D',c='b',oplot=True)
-#                plt.title(str(z)+" "+str(b))
- #               pp.savefig()
-#        pp.close()
-        return figax
-
-    @staticmethod
-    def oneDiffusionMap(dmsys,ind, x0,nsig=20):
-        alpha=0.025
-        s=5
-        ndim=4
-        dm=dmsys.dm[ind]['dm']
-        isgood = dmsys.dm[ind]['bias']
-        figax = plt.subplots(nrows=ndim-1,ncols=ndim-1,figsize=(8,6))
-        
-        if isgood:
-            badx=dmsys.data.x[numpy.abs(dmsys.data.y) > x0[0]]
-            bx = dm.transform(badx)
-            gx = dm.dmap['X']
-            by= dmsys.data.y[numpy.abs(dmsys.data.y) > x0[0]]
-        else:
-            goodx=dmsys.data.x[numpy.abs(dmsys.data.y) <= x0[0]]
-            gx = dm.transform(goodx)
-            bx = dm.dmap['X']
-            by = dm.data.y
-            badx= dm.data.x[numpy.abs(dm.data.y) > x0[0]]
-                #hasanalog=DMSystem.hasTrainingAnalog(x)
-        figax[0].suptitle(str(isgood))
-        Plots.x(gx[:,xrange(ndim)],figax=figax,label='low bias',color='g',alpha=alpha,s=s)
-        w=split(badx)
-        dum = bx[:,xrange(ndim)]
-        w_=numpy.logical_and(w,  numpy.abs(by) <= x0[0])
-        Plots.x(dum[w,:],figax=figax,label='high bias: Pop 1',color='b',s=s,alpha=alpha)
-        w_=numpy.logical_and(w,  numpy.abs(by) > x0[0])
-        Plots.x(dum[w,:],figax=figax,label='high bias: Pop 2',color='r',s=s,alpha=alpha)
-
-        for ic in xrange(ndim-1):
-            for ir in xrange(ic,ndim-1):
-                l = len(dm.dmap['X'][:,ic])
-                #l = w.sum()
-                xl = numpy.sort(dm.dmap['X'][:,ic])
-                xmn = xl[int(l*.5)]
-                xsd = xl[int(l*.05):int(l*.95)].std()
-                xl = numpy.sort(dm.dmap['X'][:,ir+1])
-                ymn = xl[int(l*.5)]
-                ysd = xl[int(l*.05):int(l*.95)].std()
-
-                figax[1][ir,ic].set_xlim(xmn-nsig*xsd,xmn+nsig*xsd)
-                figax[1][ir,ic].set_ylim(ymn-nsig*ysd,ymn+nsig*ysd)
-
-        return figax
-
     @staticmethod
     def x(x,xlabel=None, figax='default',nsig=None,**kwargs):
 
@@ -196,11 +123,6 @@ class Data:
     def lessthan(self, thresh):
         return self.y < thresh
 
-#    def plot(self):
-#        import triangle
-#        figure  = triangle.corner(self.x)
- #       return figure
-
     def output(self,filename):
        f=open(filename,'w')
        for a,b in zip(self.x, self.y):
@@ -264,14 +186,14 @@ def manage_data(test_size=0.1, random_state=7):
     data = f[1].data
 
     # Get rid of entries without spectroscopic redshifts.
-    inds = data['ZSPEC'] >= 0
+    inds = data['ZSPEC'] > 1e-2
     sdata = data[inds]
 
     # Get rid of entries outside of photo-z range
     inds = numpy.logical_and(sdata['ZRED2'] >= zmin, sdata['ZRED2'] < zmax)
     sdata = sdata[inds]
 
-    # Compute bias.
+    # Compute bias
     bias = sdata['ZRED2'] - sdata['ZSPEC']
 
     # Get features for *entire* sample.
@@ -407,12 +329,12 @@ class DMSystem:
         
         self.state = None
 
-        if config == 'default':
-            self.config = self._onebad
-        else:
-            self.config = self._redshift_bins
+        # if config == 'default':
+        #     self.config = self._onebad
+        # else:
+        #     self.config = self._redshift_bins
 
-    def _onebad(self, good_inds, bad_inds, par):
+    def config(self, good_inds, bad_inds, par):
         self.dm=[]
         key = dict()
         newmap=DiffusionMap(self.data[bad_inds],par[1],key)
@@ -430,39 +352,9 @@ class DMSystem:
         key['train_inds'] = good_inds
         self.dm.append(key)
 
-        
-    def _redshift_bins(self, good_inds, bad_inds, par):
-        """ Calculates the photometric redshift bin ranges and
-        determine which subsets of Data go into which bin, the results
-        of which are set in self.wzbins
-        """
-        self.nbins =4
-
-        zp = numpy.log(1+self.data.z)
-        lzmax = numpy.log(1+zmax)
-        lzmin = numpy.log(1+zmin)
-        
-        delta = (lzmax-lzmin+1e-16)/self.nbins
-
-        self.wzbins=[]
-
-        for i in xrange(self.nbins):
-            dum = zp >= lzmin+i*delta
-            self.wzbins.append(numpy.logical_and(dum,zp< lzmin+(i+1)*delta))
-
-        self.dm=[]
-        
-        for wzbin,zlab in zip(self.wzbins,xrange(len(self.wzbins))):
-           for wbbin,blab in zip([good_inds,bad_inds],[True,False]):
-                wboth = numpy.logical_and(wzbin,wbbin)
-                if len(wboth) == 0:
-                    raise Exception('Nothing in training set')
-                key=dict()
-                key['zbin']=zlab
-                key['bias']=blab
-                newmap = DiffusionMap(self.data[wboth],par[1],key)
-                key['dm']=newmap
-                self.dm.append(key)
+        self.nvar = 0
+        for dm in self.dm:
+            self.nvar = self.nvar+dm['dm'].nvar
 
     def create_dm(self, par):
 
@@ -477,14 +369,11 @@ class DMSystem:
         self.bad_inds=bad_inds
         self.config(good_inds, bad_inds, par)
 
-        ncoord = 0
-        for dm in self.dm:
-            ncoord = ncoord+dm['dm'].nvar
+
 
         self.state = numpy.array(par)
 
-        train_coordinates = numpy.zeros((len(self.data.x),  ncoord))
-        # print train_coordinates.shape
+        train_coordinates = numpy.zeros((len(self.data.x),  self.nvar))
 
         # put the new coordinates into a data
         ncoord=0
@@ -496,7 +385,21 @@ class DMSystem:
                 dm['dm'].transform(self.data.x[numpy.logical_not(dm['train_inds'])])
             ncoord=ncoord+dm['dm'].nvar
 
-        self.dmdata = Data(train_coordinates,self.data.y,self.data.x)
+        # renormalize the coordinates to be sane
+        self.mns=[]
+        self.sigs=[]
+        for index in xrange(ncoord):
+            xso=numpy.sort(train_coordinates[:,index])
+            l= len(xso)
+            xso=xso[l*.1:l*.9]
+            xmn = xso[len(xso)/2]
+            xsig = xso.std()
+            train_coordinates[:,index]=(train_coordinates[:,index]-xmn)/xsig
+            self.mns.append(xmn)
+            self.sigs.append(xsig)
+        self.mns=numpy.array(self.mns)
+        self.sigs=numpy.array(self.sigs)
+        self.dmdata = Data(train_coordinates,self.data.y,self.data.z)
 
     def coordinates(self, x, par):
 
@@ -508,123 +411,189 @@ class DMSystem:
         for dm in self.dm:
             coords=numpy.append(coords, dm['dm'].transform(x),axis=1)
 
+        for index in xrange(len(self.mns)):
+            coords[:,index]=(coords[:,index]-self.mns[index])/self.sigs[index]
         return coords
 
-class WeightedBias:
+import sklearn.ensemble
+class MyRegressor(sklearn.ensemble.forest.ForestRegressor):
+    """A random forest regressor.
 
-    def __init__(self, dmsys, par, random_state=10):
-        self.nuse=8
-        self.dmsys = dmsys
-        self.random_state = random_state
+    A random forest is a meta estimator that fits a number of classifying
+    decision trees on various sub-samples of the dataset and use averaging
+    to improve the predictive accuracy and control over-fitting.
 
-        dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
-        y = numpy.array(self.dmsys.data.y)
+    Parameters
+    ----------
+    n_estimators : integer, optional (default=10)
+        The number of trees in the forest.
 
-        ok = DMSystem.hasTrainingAnalog(dmcoords)
+    criterion : string, optional (default="mse")
+        The function to measure the quality of a split. The only supported
+        criterion is "mse" for the mean squared error.
+        Note: this parameter is tree-specific.
 
-        self.co = ClassifyOptimize(dmcoords[ok,0:self.nuse], numpy.abs(y[ok]),par)
+    max_features : int, float, string or None, optional (default="auto")
+        The number of features to consider when looking for the best split:
 
-#        self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=self.random_state)
+        - If int, then consider `max_features` features at each split.
+        - If float, then `max_features` is a percentage and
+          `int(max_features * n_features)` features are considered at each
+          split.
+        - If "auto", then `max_features=n_features`.
+        - If "sqrt", then `max_features=sqrt(n_features)`.
+        - If "log2", then `max_features=log2(n_features)`.
+        - If None, then `max_features=n_features`.
 
-    def train(self,par):
-        dmcoords = self.dmsys.coordinates(self.dmsys.data.x, par)
-        y = numpy.array(self.dmsys.data.y)
+        Note: the search for a split does not stop until at least one
+        valid partition of the node samples is found, even if it requires to
+        effectively inspect more than ``max_features`` features.
+        Note: this parameter is tree-specific.
 
-        ok = DMSystem.hasTrainingAnalog(dmcoords)
+    max_depth : integer or None, optional (default=None)
+        The maximum depth of the tree. If None, then nodes are expanded until
+        all leaves are pure or until all leaves contain less than
+        min_samples_split samples.
+        Ignored if ``max_samples_leaf`` is not None.
+        Note: this parameter is tree-specific.
 
-        self.classifier.fit(dmcoords[ok,0:self.nuse], numpy.abs(y[ok]) <= par[0])
-        self.dmcoords=dmcoords
-        self.hasAnalog=ok
-#        return dmcoords, y
+    min_samples_split : integer, optional (default=2)
+        The minimum number of samples required to split an internal node.
+        Note: this parameter is tree-specific.
 
-    def weighted_mean(self, dmcoords, y, par):
-        ok = DMSystem.hasTrainingAnalog(dmcoords)
-        goodin=numpy.where(self.classifier.classes_)[0][0]
+    min_samples_leaf : integer, optional (default=1)
+        The minimum number of samples in newly created leaves.  A split is
+        discarded if after the split, one of the leaves would contain less then
+        ``min_samples_leaf`` samples.
+        Note: this parameter is tree-specific.
 
-        proba= self.classifier.predict_proba(dmcoords[ok,0:self.nuse])[:,goodin]
-        ans=numpy.empty(len(y),dtype='bool')
-        ans.fill(True)
-        ans[ok] = proba > 0.9
-        if numpy.sum(ans) == 0:
-            raise Exception("No passing objects")
-        else:
-            res= numpy.mean(y[ans])
-            print res, y[ans].std(), numpy.sum(ans),
-            res = res**2/numpy.sum(ans)
-            print res
-            return res
+    max_leaf_nodes : int or None, optional (default=None)
+        Grow trees with ``max_leaf_nodes`` in best-first fashion.
+        Best nodes are defined as relative reduction in impurity.
+        If None then unlimited number of leaf nodes.
+        If not None then ``max_depth`` will be ignored.
+        Note: this parameter is tree-specific.
 
-    def value_internal(self, par):
-        print par
-        self.train(par)
-        return self.weighted_mean(self.dmcoords[self.hasAnalog],self.dmsys.y[self.hasAnalog],par)
+    bootstrap : boolean, optional (default=True)
+        Whether bootstrap samples are used when building trees.
 
-    def value_external(self, x_, y_, par):
-        self.train(par)
-        dmcoords = self.dmsys.coordinates(x_, par)
+    oob_score : bool
+        whether to use out-of-bag samples to estimate
+        the generalization error.
 
-        return self.weighted_mean(dmcoords,y_,par)
+    n_jobs : integer, optional (default=1)
+        The number of jobs to run in parallel for both `fit` and `predict`.
+        If -1, then the number of jobs is set to the number of cores.
 
- 
-def train(wb):
+    random_state : int, RandomState instance or None, optional (default=None)
+        If int, random_state is the seed used by the random number generator;
+        If RandomState instance, random_state is the random number generator;
+        If None, the random number generator is the RandomState instance used
+        by `np.random`.
 
-    # the things to optimize are eps_val and threshold for good and bad
-    fun=wb.value_internal
-    #x0 = numpy.array([0.015,0.001])
-    import scipy.optimize
-    ans = scipy.optimize.brute(fun,((0.01,0.04),(5e-4,3e-2)),finish=scipy.optimize.fmin)
-#    print ans[0], type(ans[0])
-#    ans2=  scipy.optimize.minimize(fun,ans[0],bounds=[(0.01,0.1),(5e-4,3e-2)])
-    print ans
-    return
+    verbose : int, optional (default=0)
+        Controls the verbosity of the tree building process.
 
-class ClassifyOptimize:
-    def __init__(self,train_data_x,train_data_y, par, ranges=((2,8),) ,Ns=7):
-        self.pthresh=0.99
-        self.classifier = sklearn.ensemble.RandomForestClassifier(random_state=11,n_estimators=100)
-        self.train_data_x=train_data_x
-        self.train_data_y=train_data_y
-        self.par = par
-        fun = self.objective
-        ans = scipy.optimize.brute(fun,ranges=ranges,Ns=Ns,finish=None)
-        self.setup_classifier(ans)
+    Attributes
+    ----------
+    `estimators_`: list of DecisionTreeRegressor
+        The collection of fitted sub-estimators.
 
-    def objective(self,x):
-        self.setup_classifier(x)
-        proba = self.predict(self.train_data_x)
-        ans = proba > self.pthresh
-        if numpy.sum(ans) == 0:
-            raise Exception("No passing objects")
-        else:
-            res= numpy.mean(self.train_data_y[ans])
-            return res
+    `feature_importances_` : array of shape = [n_features]
+        The feature importances (the higher, the more important the feature).
 
-    def metrics(self,x,y):
-        proba=self.predict(x)
-        ans = proba > self.pthresh
-        if numpy.sum(ans) == 0:
-            raise Exception("No passing objects")
-        else:
-            res= numpy.mean(y[ans])
-            print res, y[ans].std(), numpy.sum(ans),
-            res = res**2/numpy.sum(ans)
-            print res
-            return ans
+    `oob_score_` : float
+        Score of the training dataset obtained using an out-of-bag estimate.
 
-    def setup_classifier(self,x):
-        params = dict()
-        params['max_features'] = int(x)
-        self.classifier.set_params(**params)
-        self.classifier.fit(self.train_data_x, numpy.abs(self.train_data_y) <= self.par[0])
+    `oob_prediction_` : array of shape = [n_samples]
+        Prediction computed with out-of-bag estimate on the training set.
 
-    def predict(self,x):
-        goodin=numpy.where(self.classifier.classes_)[0][0]
-        proba=self.classifier.predict_proba(x)[:,goodin]
-        return proba 
+    References
+    ----------
 
+    .. [1] L. Breiman, "Random Forests", Machine Learning, 45(1), 5-32, 2001.
+
+    See also
+    --------
+    DecisionTreeRegressor, ExtraTreesRegressor
+    """
+    def __init__(self, eval_frac=0.1,
+                 n_estimators=10,
+                 criterion="mse",
+                 max_depth=None,
+                 min_samples_split=2,
+                 min_samples_leaf=1,
+                 max_features="auto",
+                 max_leaf_nodes=None,
+                 bootstrap=True,
+                 oob_score=False,
+                 n_jobs=1,
+                 random_state=None,
+                 verbose=0,
+                 min_density=None,
+                 compute_importances=None):
+        super(MyRegressor, self).__init__(
+            base_estimator=sklearn.ensemble.forest.DecisionTreeRegressor(),
+            n_estimators=n_estimators,
+            estimator_params=("criterion", "max_depth", "min_samples_split",
+                              "min_samples_leaf", "max_features",
+                              "max_leaf_nodes", "random_state"),
+            bootstrap=bootstrap,
+            oob_score=oob_score,
+            n_jobs=n_jobs,
+            random_state=random_state,
+            verbose=verbose)
+
+        self.eval_frac=eval_frac
+        self.criterion = criterion
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.max_features = max_features
+        self.max_leaf_nodes = max_leaf_nodes
+
+        if min_density is not None:
+            warn("The min_density parameter is deprecated as of version 0.14 "
+                 "and will be removed in 0.16.", DeprecationWarning)
+
+        if compute_importances is not None:
+            warn("Setting compute_importances is no longer required as "
+                 "version 0.14. Variable importances are now computed on the "
+                 "fly when accessing the feature_importances_ attribute. "
+                 "This parameter will be removed in 0.16.",
+                 DeprecationWarning)
+
+    def score(self,X, y, sample_weight=None):
+        y_predict, y_var =self.predict(X)
+        delta_y=y_predict-y
+        sin = numpy.argsort(y_var)
+        sin=sin[0:len(sin)*self.eval_frac]
+        delta_y=delta_y[sin]
+        return numpy.exp(-delta_y.std())
+
+
+class Objective(object):
+    """docstring for Objective"""
+    def __init__(self, x, y):
+        super(Objective, self).__init__()
+        self.x = x
+        self.y = y
+        self.clf=MyRegressor(0.1)
+
+    def eval(self,par):
+        kwargs=dict()
+        kwargs['n_estimators']=int(par[0])
+        kwargs['max_features']=int(par[1])
+        kwargs['min_samples_leaf']=int(par[2])
+        kwargs['random_state']=int(par[3])
+        clf = self.clf.set_params(**kwargs)
+        scores = cross_val_score(clf, dmsys.dmdata.x,dmsys.dmdata.y, cv=5)
+        score = -numpy.log(scores.mean())
+        return score
+        
 if __name__ == '__main__':
 
-    all = True
+    all = False
     parser = ArgumentParser()
     parser.add_argument('test_size', nargs='?',default=0.1)
     parser.add_argument('seed', nargs='?',default=9)
@@ -634,12 +603,16 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([0.02,0.004])
+    x0 = numpy.array([0.02,0.0025])
 
     prob=0.9
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
+
+    # plt.scatter(train_data.y,train_data.z)
+    # plt.show()
+    # wef
 
     #plot data
     if all:
@@ -665,48 +638,115 @@ if __name__ == '__main__':
         pp.savefig(figax2[0])
         #plt.show()
 
-    
-    # the new coordinate system based on the training data
-    dmsys= DMSystem(train_data)
+    import os.path
+    if os.path.isfile('dmsys.pkl'):
+        #print 'get pickle'
+        pklfile=open('dmsys.pkl','r')
+        dmsys=pickle.load(pklfile)
+    else:
+        # the new coordinate system based on the training data
+        dmsys= DMSystem(train_data)
 
-    for x01 in [0.0025]:
-        x0[1]=x01
+        # for x01 in [0.0025]:
+        #     x0[1]=x01
         dmsys.create_dm(x0)
 
-        if all:
-            figax=dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) <= x0[0] , label='low bias',color='b',nsig=10)
-            dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) > x0[0] , label='high bias',color='r',figax=figax,nsig=10)
-            pp.savefig(figax[0])
-            
-        co = ClassifyOptimize(dmsys.dmdata.x,dmsys.dmdata.y,x0)
-        test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
-        data_prob = co.predict(test_data_dm.x)
-        data_predict=data_prob > prob
+        #print 'make pickle'
+        pklfile=open('dmsys.pkl','w')
+        pickle.dump(dmsys,pklfile)
+    pklfile.close()
 
-        print test_data.y[data_predict].mean(), test_data.y[data_predict].std(), data_predict.sum()
-        if all:
-            figax,figax2=test_data_dm.plotClassification(x0[0],data_predict,nsig=10.)
-            # plt.show()
-            pp.savefig(figax[0])
-            pp.savefig(figax2[0])
+    if all:
+        for index in xrange(8):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.scatter(dmsys.dmdata.x[:,index],dmsys.dmdata.y)
+            ax.set_xlim((-20,20))
+        plt.show()
 
-            figax,figax2=test_data.plotClassification(x0[0],data_predict,nsig=10.)
-            # plt.show()
-            pp.savefig(figax[0])
-            pp.savefig(figax2[0])
+    if all:
+        figax=dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) <= x0[0] ,
+            label='low bias',color='b',nsig=10)
+        dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) > x0[0] ,
+            label='high bias',color='r',figax=figax,nsig=10)
+        pp.savefig(figax[0])
+        
+     
+    objective = Objective(dmsys.dmdata.x,dmsys.dmdata.y)
+    ## the order of the variables
+    # n_estimators
+    # max_features
+    # min_samples_leaf
+    # seed
 
-            pp.close()
-        wef
+    filename = 'optimum.pkl'
+    if os.path.isfile(filename):
+#        print 'get pickle'
+        pklfile=open(filename,'r')
+        (frac_include,x0s,fvals)=pickle.load(pklfile)
+    else:
+#        print 'make pickle'
+        frac_include  =  0.01*1.5**numpy.arange(12)
+        x0s = []
+        fvals = []
+        for frac in frac_include:
+            objective.clf.eval_frac=frac
+            x0, fval, grid, jout = scipy.optimize.brute(objective.eval,
+                ranges=(slice(10,60,5),slice(3,dmsys.nvar+1,1),slice(1,10,1),slice(0,10,1)),finish=False,
+                full_output=True)
+            x0s.append(x0)
+            fvals.append(fval)
+        x0s=numpy.array(x0s)
+        fvals=numpy.array(fvals)
+        pklfile=open(filename,'w')
+        pickle.dump((frac_include,x0s,fvals),pklfile)
+    pklfile.close()
 
-    # the calculation of the weighted bias
-        wb = WeightedBias(dmsys, x0, rs)
-        tx = dmsys.coordinates(test_data.x, x0)
-        classify=wb.co.metrics(tx,test_data.y)
+     
+    # clf = clf.fit(dmsys.dmdata.x,dmsys.dmdata.y)
 
-    # optimization
-#    t=train(wb)
-#    Plots.diffusionMaps(dmsys)
- #   wb.value_external(test_data.x, test_data.y, x0)
-#    pickle.dump([t,dmsys], open("trained_dmsystem.pkl","wb"))
+    # y_pred, y_var = clf.predict(dmsys.dmdata.x)
+    # y_sig=numpy.sqrt(y_var)
 
-    shit
+    # delta_y = y_pred-dmsys.dmdata.y
+
+    # fig1 = plt.figure()
+
+    # ax1 = fig1.add_subplot(111)
+    # ax1.scatter(y_sig, delta_y, label='train')
+
+    # sin = numpy.argsort(y_sig)
+    # delta_y=delta_y[sin]
+    # y_sig=y_sig[sin]
+    # std=[]
+    # predind = numpy.arange(10,len(delta_y),10)
+    # for i in xrange(len(predind)-1):
+    #     std.append(delta_y[predind[i]:predind[i+1]].std())
+    # std=numpy.array(std)
+    # fig2 = plt.figure()
+    # ax2 = fig2.add_subplot(111)
+    # ax2.scatter(y_sig[predind[1:]],std,label='train')
+
+
+    # test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
+    # y_pred, y_var = clf.predict(test_data_dm.x)
+    # y_sig=numpy.sqrt(y_var)
+
+    # delta_y = y_pred-test_data.y
+
+    # ax1.scatter(y_sig, delta_y, label='test',color='r',alpha=0.1)
+
+    # sin = numpy.argsort(y_sig)
+    # delta_y=delta_y[sin]
+    # y_sig=y_sig[sin]
+    # std=[]
+    # predind = numpy.arange(10,len(delta_y),10)
+    # for i in xrange(len(predind)-1):
+    #     std.append(delta_y[predind[i]:predind[i+1]].std())
+    # std=numpy.array(std)
+    # ax2.scatter(y_sig[predind[1:]],std,label='test',color='r',alpha=0.1)
+
+    # ax1.legend()
+    # ax2.legend()
+
+    # plt.show()

@@ -22,6 +22,8 @@ from sklearn.cross_validation import cross_val_score
 import sklearn.ensemble
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
+
+import copy
 mpl.rc('figure', figsize=(11,11))
 
 """
@@ -45,13 +47,18 @@ def split(x):
     #(0.8, 0.33), (1.1, 0.42)
     return x[:,1] < 0.33 + (0.42-0.33)/(1.1-0.8)*(x[:,0]-0.8)
 
+from matplotlib.legend_handler import HandlerNpoints
+
 class Plots:
     @staticmethod
     def x(x,xlabel=None, figax='default',nsig=None,**kwargs):
 
         ndim=x.shape[1]-1
         if figax == 'default':
-            fig, axes = plt.subplots(nrows=ndim,ncols=ndim)
+            fig, axes = plt.subplots(nrows=ndim,ncols=ndim,sharex=True,sharey=True)
+            #fig.tight_layout()
+            fig.subplots_adjust(wspace = 0.15)
+            fig.subplots_adjust(hspace = 0.15)
             for i in xrange(axes.shape[0]):
                 for j in xrange(axes.shape[1]):
                     axes[i,j].set_visible(False)
@@ -64,7 +71,7 @@ class Plots:
                 axes[ir,ic].set_visible(True)
                 axes[ir,ic].scatter(x[:,ic],x[:,ir+1],**kwargs)
                                             
-                axes[ir,ic].legend(prop={'size':6})
+                #axes[ir,ic].legend(prop={'size':6,'alpha':1})
                 if xlabel is not None:
                     if ic==0:
                         axes[ir,ic].set_ylabel(xlabel[ir+1])
@@ -644,7 +651,7 @@ class Objective(object):
 
 if __name__ == '__main__':
 
-    all = False
+    doplot = True
     parser = ArgumentParser()
     parser.add_argument('test_size', nargs='?',default=0.1)
     parser.add_argument('seed', nargs='?',default=9)
@@ -665,29 +672,20 @@ if __name__ == '__main__':
     # plt.show()
     # wef
 
-    #plot data
-    if all:
-        pp = PdfPages('out.pdf')
-        figax=train_data.plot(lambda x: numpy.abs(train_data.y) <= x0[0] , label='low bias',color='b')
-       # w = numpy.logical_and(split(train_data.x), numpy.abs(train_data.y) > x0[0])                    
 
 
-        train_data.plot(lambda x: numpy.abs(train_data.y) > x0[0] , label='high bias',color='r',figax=figax)
-        pp.savefig()
-        #plt.show()
 
+    # if doplot:
+    #     #plot how well calssification works on test data
+    #     co = ClassifyOptimize(train_data.x,train_data.y,x0,ranges=((2,4),),Ns=3)
+    #     data_prob = co.predict(test_data.x)
+    #     data_predict=data_prob > prob
 
-    if all:
-        #plot how well calssification works on test data
-        co = ClassifyOptimize(train_data.x,train_data.y,x0,ranges=((2,4),),Ns=3)
-        data_prob = co.predict(test_data.x)
-        data_predict=data_prob > prob
-
-        print test_data.y[data_predict].mean(), test_data.y[data_predict].std(), data_predict.sum()
-        figax,figax2=test_data.plotClassification(x0[0],data_predict)
-        pp.savefig(figax[0])
-        pp.savefig(figax2[0])
-        #plt.show()
+    #     print test_data.y[data_predict].mean(), test_data.y[data_predict].std(), data_predict.sum()
+    #     figax,figax2=test_data.plotClassification(x0[0],data_predict)
+    #     pp.savefig(figax[0])
+    #     pp.savefig(figax2[0])
+    #     #plt.show()
 
     import os.path
     if os.path.isfile('dmsys.pkl'):
@@ -707,21 +705,50 @@ if __name__ == '__main__':
         pickle.dump(dmsys,pklfile)
     pklfile.close()
 
-    if all:
-        for index in xrange(8):
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.scatter(dmsys.dmdata.x[:,index],dmsys.dmdata.y)
-            ax.set_xlim((-20,20))
-        plt.show()
+    # if doplot:
+    #     for index in xrange(8):
+    #         fig = plt.figure()
+    #         ax = fig.add_subplot(111)
+    #         ax.scatter(dmsys.dmdata.x[:,index],dmsys.dmdata.y)
+    #         ax.set_xlim((-20,20))
+    #     plt.show()
+    import matplotlib.collections
+    import matplotlib.lines
+    import matplotlib.patches
+    if doplot:
+        ## stuff to force the legend to have alpha=1
+        labs=['positive bias','negative bias','no bias']
+        # lines = [matplotlib.lines.Line2D([],[],color='r',marker='.',linestyle='None'),
+        # matplotlib.lines.Line2D([],[],color='b',marker='.',linestyle='None')
+        # ,matplotlib.lines.Line2D([],[],color='k',marker='.',linestyle='None')]
+        lines = [matplotlib.patches.Circle([], color='r'),matplotlib.patches.Circle([], color='b')
+            ,matplotlib.patches.Circle([], color='k')]
 
-    if all:
-        figax=dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) <= x0[0] ,
-            label='low bias',color='b',nsig=10)
-        dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) > x0[0] ,
-            label='high bias',color='r',figax=figax,nsig=10)
-        pp.savefig(figax[0])
-        
+        plt.clf()
+       # w = numpy.logical_and(split(train_data.x), numpy.abs(train_data.y) > x0[0])                    
+        figax= train_data.plot(lambda x: train_data.y > x0[0] , label='positive bias',color='r',alpha=0.02)
+        train_data.plot(lambda x: train_data.y < -x0[0] , label='negative bias',color='b',figax=figax,alpha=0.02)
+        train_data.plot(lambda x: numpy.abs(train_data.y) <= x0[0] , label='no bias',color='k',
+            figax=figax,alpha=0.02)
+
+        for ax in figax[1]:
+            for a in ax:
+                a.legend(lines, labs,prop={'size':6})
+
+        plt.savefig('../results/colorspace.png')
+
+        plt.clf()
+        figax = dmsys.dmdata.plot(lambda x: dmsys.dmdata.y > x0[0] ,
+            label='positive bias',color='r',nsig=4,alpha=0.01)
+        dmsys.dmdata.plot(lambda x: dmsys.dmdata.y < -x0[0] ,
+            label='negative bias',color='b',figax=figax,nsig=4,alpha=0.01)
+        dmsys.dmdata.plot(lambda x: numpy.abs(dmsys.dmdata.y) <= x0[0] ,
+            label='no bias',color='k',figax=figax,nsig=4,alpha=0.01)
+
+        for ax in figax[1]:
+            for a in ax:
+                a.legend(lines, labs,prop={'size':3})
+        plt.savefig('../results/dmspace.png')
      
 
     filename = 'optimum.pkl'
@@ -741,27 +768,34 @@ if __name__ == '__main__':
         pickle.dump((objective_dm, objective_color),pklfile)
     pklfile.close()
 
-    if all:
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.scatter(objective_dm.frac_include,optimum_dm[1],label='dm',color='b')
-        ax.scatter(objective_color.frac_include,optimum_color[1],label='color',color='r')
-        ax.legend()
-
-
     test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
-    if all:
+    if doplot:
+        plt.clf()
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        objective_dm.plot_scatter(ax,label='dm',color='b')
-        objective_color.plot_scatter(ax,label='color',color='r')
+        ax.scatter(objective_dm.frac_include,objective_dm.fvals,label='dm',color='b')
+        ax.scatter(objective_color.frac_include,objective_color.fvals,label='color',color='r')
+        objective_dm.plot_scatter_external(ax,test_data_dm.x,test_data_dm.y,label='dm',color='b',marker='x')
+        objective_color.plot_scatter_external(ax,test_data.x,test_data.y,label='color',color='r',marker='x')
+        ax.legend()
+        plt.savefig('../results/sigmas.png')
+        wefwe
+
+
+    if doplot:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        objective_dm.plot_scatter(ax,label='Train dm',color='b')
+        objective_color.plot_scatter(ax,label='Train color',color='r')
         ax.legend()
 
-    if all:
+    if doplot:
         fig = plt.figure()
         ax = fig.add_subplot(111)
         objective_dm.plot_scatter_external(ax,test_data_dm.x,test_data_dm.y,label='dm',color='b')
         objective_color.plot_scatter_external(ax,test_data.x,test_data.y,label='color',color='r')
+
+
         ax.legend()
         plt.show()
 

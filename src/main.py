@@ -422,170 +422,170 @@ class DMSystem:
             coords[:,index]=(coords[:,index]-self.mns[index])/self.sigs[index]
         return coords
 
-import sklearn.ensemble
-class MyRegressor(sklearn.ensemble.forest.ForestRegressor):
-    """A random forest regressor.
+# import sklearn.ensemble
+# class MyRegressor(sklearn.ensemble.forest.ForestRegressor):
+#     """A random forest regressor.
 
-    A random forest is a meta estimator that fits a number of classifying
-    decision trees on various sub-samples of the dataset and use averaging
-    to improve the predictive accuracy and control over-fitting.
+#     A random forest is a meta estimator that fits a number of classifying
+#     decision trees on various sub-samples of the dataset and use averaging
+#     to improve the predictive accuracy and control over-fitting.
 
-    Parameters
-    ----------
-    n_estimators : integer, optional (default=10)
-        The number of trees in the forest.
+#     Parameters
+#     ----------
+#     n_estimators : integer, optional (default=10)
+#         The number of trees in the forest.
 
-    criterion : string, optional (default="mse")
-        The function to measure the quality of a split. The only supported
-        criterion is "mse" for the mean squared error.
-        Note: this parameter is tree-specific.
+#     criterion : string, optional (default="mse")
+#         The function to measure the quality of a split. The only supported
+#         criterion is "mse" for the mean squared error.
+#         Note: this parameter is tree-specific.
 
-    max_features : int, float, string or None, optional (default="auto")
-        The number of features to consider when looking for the best split:
+#     max_features : int, float, string or None, optional (default="auto")
+#         The number of features to consider when looking for the best split:
 
-        - If int, then consider `max_features` features at each split.
-        - If float, then `max_features` is a percentage and
-          `int(max_features * n_features)` features are considered at each
-          split.
-        - If "auto", then `max_features=n_features`.
-        - If "sqrt", then `max_features=sqrt(n_features)`.
-        - If "log2", then `max_features=log2(n_features)`.
-        - If None, then `max_features=n_features`.
+#         - If int, then consider `max_features` features at each split.
+#         - If float, then `max_features` is a percentage and
+#           `int(max_features * n_features)` features are considered at each
+#           split.
+#         - If "auto", then `max_features=n_features`.
+#         - If "sqrt", then `max_features=sqrt(n_features)`.
+#         - If "log2", then `max_features=log2(n_features)`.
+#         - If None, then `max_features=n_features`.
 
-        Note: the search for a split does not stop until at least one
-        valid partition of the node samples is found, even if it requires to
-        effectively inspect more than ``max_features`` features.
-        Note: this parameter is tree-specific.
+#         Note: the search for a split does not stop until at least one
+#         valid partition of the node samples is found, even if it requires to
+#         effectively inspect more than ``max_features`` features.
+#         Note: this parameter is tree-specific.
 
-    max_depth : integer or None, optional (default=None)
-        The maximum depth of the tree. If None, then nodes are expanded until
-        all leaves are pure or until all leaves contain less than
-        min_samples_split samples.
-        Ignored if ``max_samples_leaf`` is not None.
-        Note: this parameter is tree-specific.
+#     max_depth : integer or None, optional (default=None)
+#         The maximum depth of the tree. If None, then nodes are expanded until
+#         all leaves are pure or until all leaves contain less than
+#         min_samples_split samples.
+#         Ignored if ``max_samples_leaf`` is not None.
+#         Note: this parameter is tree-specific.
 
-    min_samples_split : integer, optional (default=2)
-        The minimum number of samples required to split an internal node.
-        Note: this parameter is tree-specific.
+#     min_samples_split : integer, optional (default=2)
+#         The minimum number of samples required to split an internal node.
+#         Note: this parameter is tree-specific.
 
-    min_samples_leaf : integer, optional (default=1)
-        The minimum number of samples in newly created leaves.  A split is
-        discarded if after the split, one of the leaves would contain less then
-        ``min_samples_leaf`` samples.
-        Note: this parameter is tree-specific.
+#     min_samples_leaf : integer, optional (default=1)
+#         The minimum number of samples in newly created leaves.  A split is
+#         discarded if after the split, one of the leaves would contain less then
+#         ``min_samples_leaf`` samples.
+#         Note: this parameter is tree-specific.
 
-    max_leaf_nodes : int or None, optional (default=None)
-        Grow trees with ``max_leaf_nodes`` in best-first fashion.
-        Best nodes are defined as relative reduction in impurity.
-        If None then unlimited number of leaf nodes.
-        If not None then ``max_depth`` will be ignored.
-        Note: this parameter is tree-specific.
+#     max_leaf_nodes : int or None, optional (default=None)
+#         Grow trees with ``max_leaf_nodes`` in best-first fashion.
+#         Best nodes are defined as relative reduction in impurity.
+#         If None then unlimited number of leaf nodes.
+#         If not None then ``max_depth`` will be ignored.
+#         Note: this parameter is tree-specific.
 
-    bootstrap : boolean, optional (default=True)
-        Whether bootstrap samples are used when building trees.
+#     bootstrap : boolean, optional (default=True)
+#         Whether bootstrap samples are used when building trees.
 
-    oob_score : bool
-        whether to use out-of-bag samples to estimate
-        the generalization error.
+#     oob_score : bool
+#         whether to use out-of-bag samples to estimate
+#         the generalization error.
 
-    n_jobs : integer, optional (default=1)
-        The number of jobs to run in parallel for both `fit` and `predict`.
-        If -1, then the number of jobs is set to the number of cores.
+#     n_jobs : integer, optional (default=1)
+#         The number of jobs to run in parallel for both `fit` and `predict`.
+#         If -1, then the number of jobs is set to the number of cores.
 
-    random_state : int, RandomState instance or None, optional (default=None)
-        If int, random_state is the seed used by the random number generator;
-        If RandomState instance, random_state is the random number generator;
-        If None, the random number generator is the RandomState instance used
-        by `np.random`.
+#     random_state : int, RandomState instance or None, optional (default=None)
+#         If int, random_state is the seed used by the random number generator;
+#         If RandomState instance, random_state is the random number generator;
+#         If None, the random number generator is the RandomState instance used
+#         by `np.random`.
 
-    verbose : int, optional (default=0)
-        Controls the verbosity of the tree building process.
+#     verbose : int, optional (default=0)
+#         Controls the verbosity of the tree building process.
 
-    Attributes
-    ----------
-    `estimators_`: list of DecisionTreeRegressor
-        The collection of fitted sub-estimators.
+#     Attributes
+#     ----------
+#     `estimators_`: list of DecisionTreeRegressor
+#         The collection of fitted sub-estimators.
 
-    `feature_importances_` : array of shape = [n_features]
-        The feature importances (the higher, the more important the feature).
+#     `feature_importances_` : array of shape = [n_features]
+#         The feature importances (the higher, the more important the feature).
 
-    `oob_score_` : float
-        Score of the training dataset obtained using an out-of-bag estimate.
+#     `oob_score_` : float
+#         Score of the training dataset obtained using an out-of-bag estimate.
 
-    `oob_prediction_` : array of shape = [n_samples]
-        Prediction computed with out-of-bag estimate on the training set.
+#     `oob_prediction_` : array of shape = [n_samples]
+#         Prediction computed with out-of-bag estimate on the training set.
 
-    References
-    ----------
+#     References
+#     ----------
 
-    .. [1] L. Breiman, "Random Forests", Machine Learning, 45(1), 5-32, 2001.
+#     .. [1] L. Breiman, "Random Forests", Machine Learning, 45(1), 5-32, 2001.
 
-    See also
-    --------
-    DecisionTreeRegressor, ExtraTreesRegressor
-    """
-    def __init__(self, eval_frac=0.1,
-                 n_estimators=10,
-                 criterion="mse",
-                 max_depth=None,
-                 min_samples_split=2,
-                 min_samples_leaf=1,
-                 max_features="auto",
-                 max_leaf_nodes=None,
-                 bootstrap=True,
-                 oob_score=False,
-                 n_jobs=1,
-                 random_state=None,
-                 verbose=0,
-                 min_density=None,
-                 compute_importances=None):
-        super(MyRegressor, self).__init__(
-            base_estimator=sklearn.ensemble.forest.DecisionTreeRegressor(),
-            n_estimators=n_estimators,
-            estimator_params=("criterion", "max_depth", "min_samples_split",
-                              "min_samples_leaf", "max_features",
-                              "max_leaf_nodes", "random_state"),
-            bootstrap=bootstrap,
-            oob_score=oob_score,
-            n_jobs=n_jobs,
-            random_state=random_state,
-            verbose=verbose)
+#     See also
+#     --------
+#     DecisionTreeRegressor, ExtraTreesRegressor
+#     """
+#     def __init__(self, eval_frac=0.1,
+#                  n_estimators=10,
+#                  criterion="mse",
+#                  max_depth=None,
+#                  min_samples_split=2,
+#                  min_samples_leaf=1,
+#                  max_features="auto",
+#                  max_leaf_nodes=None,
+#                  bootstrap=True,
+#                  oob_score=False,
+#                  n_jobs=1,
+#                  random_state=None,
+#                  verbose=0,
+#                  min_density=None,
+#                  compute_importances=None):
+#         super(MyRegressor, self).__init__(
+#             base_estimator=sklearn.ensemble.forest.DecisionTreeRegressor(),
+#             n_estimators=n_estimators,
+#             estimator_params=("criterion", "max_depth", "min_samples_split",
+#                               "min_samples_leaf", "max_features",
+#                               "max_leaf_nodes", "random_state"),
+#             bootstrap=bootstrap,
+#             oob_score=oob_score,
+#             n_jobs=n_jobs,
+#             random_state=random_state,
+#             verbose=verbose)
 
-        self.eval_frac=eval_frac
-        self.criterion = criterion
-        self.max_depth = max_depth
-        self.min_samples_split = min_samples_split
-        self.min_samples_leaf = min_samples_leaf
-        self.max_features = max_features
-        self.max_leaf_nodes = max_leaf_nodes
+#         self.eval_frac=eval_frac
+#         self.criterion = criterion
+#         self.max_depth = max_depth
+#         self.min_samples_split = min_samples_split
+#         self.min_samples_leaf = min_samples_leaf
+#         self.max_features = max_features
+#         self.max_leaf_nodes = max_leaf_nodes
 
-        if min_density is not None:
-            warn("The min_density parameter is deprecated as of version 0.14 "
-                 "and will be removed in 0.16.", DeprecationWarning)
+#         if min_density is not None:
+#             warn("The min_density parameter is deprecated as of version 0.14 "
+#                  "and will be removed in 0.16.", DeprecationWarning)
 
-        if compute_importances is not None:
-            warn("Setting compute_importances is no longer required as "
-                 "version 0.14. Variable importances are now computed on the "
-                 "fly when accessing the feature_importances_ attribute. "
-                 "This parameter will be removed in 0.16.",
-                 DeprecationWarning)
+#         if compute_importances is not None:
+#             warn("Setting compute_importances is no longer required as "
+#                  "version 0.14. Variable importances are now computed on the "
+#                  "fly when accessing the feature_importances_ attribute. "
+#                  "This parameter will be removed in 0.16.",
+#                  DeprecationWarning)
 
-    def score(self,X, y, sample_weight=None):
-        return (self.score_info(X, y, sample_weight=sample_weight))[0]
+#     def score(self,X, y, sample_weight=None):
+#         return (self.score_info(X, y, sample_weight=sample_weight))[0]
+# #         y_predict, y_var =self.predict(X)
+# #         delta_y=y_predict-y
+# #         sin = numpy.argsort(y_var)
+# #         sin=sin[0:len(sin)*self.eval_frac]
+# #         delta_y=delta_y[sin]
+# #         return numpy.exp(-delta_y.std())
+
+#     def score_info(self,X, y, sample_weight=None):
 #         y_predict, y_var =self.predict(X)
 #         delta_y=y_predict-y
 #         sin = numpy.argsort(y_var)
 #         sin=sin[0:len(sin)*self.eval_frac]
 #         delta_y=delta_y[sin]
-#         return numpy.exp(-delta_y.std())
-
-    def score_info(self,X, y, sample_weight=None):
-        y_predict, y_var =self.predict(X)
-        delta_y=y_predict-y
-        sin = numpy.argsort(y_var)
-        sin=sin[0:len(sin)*self.eval_frac]
-        delta_y=delta_y[sin]
-        return numpy.exp(-delta_y.std()),sin
+#         return numpy.exp(-delta_y.std()),sin
 
 class Objective(object):
     """docstring for Objective"""
@@ -644,14 +644,22 @@ class Objective(object):
             self.clf.eval_frac=self.frac_include[ind]
             self.clf.fit(self.x,self.y)
             predict_color, sin = self.clf.score_info(x,y)
+            print len(sin)
             test_score_color.append(predict_color)
         test_score_color=numpy.array(test_score_color)
         test_score_color = -numpy.log(test_score_color)
         ax.scatter(self.frac_include,test_score_color,**kwargs)
+    @staticmethod
+    def crap(y, y_predict, y_var,eval_frac):
+        delta_y=y_predict-y
+        sin = numpy.argsort(y_var)
+        sin=sin[0:len(sin)*eval_frac]
+        delta_y=delta_y[sin]
+        return delta_y.std()
 
 if __name__ == '__main__':
 
-    doplot = True
+    doplot = False
     parser = ArgumentParser()
     parser.add_argument('test_size', nargs='?',default=0.1)
     parser.add_argument('seed', nargs='?',default=9)
@@ -705,6 +713,63 @@ if __name__ == '__main__':
         pickle.dump(dmsys,pklfile)
     pklfile.close()
 
+    import sklearn.metrics.pairwise
+    prunefrac=0.9
+
+    train_dist = sklearn.metrics.pairwise_distances(train_data.x,train_data.x)
+    numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+    train_min_dist=numpy.min(train_dist,axis=0)
+    train_sort = numpy.argsort(train_min_dist)
+    train_sort = train_sort[0:prunefrac * len(train_sort)]
+    train_cut =  train_sort[-1]
+    test_dist = sklearn.metrics.pairwise_distances(train_data.x[train_sort],test_data.x)
+    test_min_dist = numpy.min(test_dist,axis=0)
+
+    clf = sklearn.ensemble.forest.RandomForestRegressor(n_estimators=20,random_state=12)
+    dum=[]
+    frac_include  =  0.01*1.5**numpy.arange(12)
+    for rs in xrange(10):
+        clf.set_params(random_state=rs)
+        clf.fit(train_data.x[train_sort],train_data.y[train_sort])
+        y,dy = clf.predict(test_data.x[test_min_dist<train_cut])
+        dum2=[]
+        for frac in frac_include:
+            dum2.append(Objective.crap(test_data.y[test_min_dist<train_cut],y,
+                dy,frac))
+        dum2=numpy.array(dum2)
+        dum.append(dum2)
+    dum=numpy.array(dum)
+    print dum
+    means = dum.mean(axis=0)
+    stds = dum.std(axis=0)
+    for a,b,c in zip(frac_include,means,stds):
+        print a,b,c
+
+
+    test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
+    train_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,0:4],dmsys.dmdata.x[:,0:4])**2+
+        sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,4:],dmsys.dmdata.x[:,4:])**2)
+    numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+    train_min_dist=numpy.min(train_dist,axis=0)
+    train_sort = numpy.argsort(train_min_dist)
+    train_sort = train_sort[0:prunefrac * len(train_sort)]
+    train_cut =  train_sort[-1]
+    test_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,0:4],test_data_dm.x[:,0:4])**2+
+        sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,4:],test_data_dm.x[:,4:])**2)
+    test_min_dist = numpy.min(test_dist,axis=0)
+    dum=[]
+    for rs in xrange(10):
+        clf.fit(dmsys.dmdata.x[train_sort],dmsys.dmdata.y[train_sort])
+        y,dy = clf.predict(test_data_dm.x[test_min_dist<train_cut])
+        dum2=[]
+        for frac in frac_include:
+            dum2.append(Objective.crap(test_data_dm.y[test_min_dist<train_cut],y,dy,frac))
+        dum2=numpy.array(dum2)
+        print frac,dum2.mean(),dum2.std()
+    dum.append(dum2)
+    dum=numpy.array(dum)
+
+    fwe
     # if doplot:
     #     for index in xrange(8):
     #         fig = plt.figure()
@@ -768,13 +833,52 @@ if __name__ == '__main__':
         pickle.dump((objective_dm, objective_color),pklfile)
     pklfile.close()
 
+
+    # clf = objective_dm.clf.fit(dmsys.dmdata.x,dmsys.dmdata.y)
+    # test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
+    # y_pred, y_var = clf.predict(test_data_dm.x)
+    # y_sig=numpy.sqrt(y_var)
+    # delta_y = y_pred-test_data.y
+    # ax1.scatter(y_sig, delta_y, label='test',color='r',alpha=0.1)
+    # sin = numpy.argsort(y_sig)
+    # delta_y=delta_y[sin]
+    # y_sig=y_sig[sin]
+    # std=[]
+    # predind = numpy.arange(10,len(delta_y),10)
+    # for i in xrange(len(predind)-1):
+    #     std.append(delta_y[predind[i]:predind[i+1]].std())
+    # std=numpy.array(std)
+    # ax2.scatter(y_sig[predind[1:]],std,label='test',color='r',alpha=0.1)
+    # ax1.legend()
+    # ax2.legend()
+    # plt.show()
+    
+
+  # end old code
     test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
-    if doplot:
+    dists=numpy.sqrt(numpy.dot(dmsys.dmdata.x[:,0:4],numpy.transpose(test_data_dm.x[:,0:4]))**2 +
+        numpy.dot(dmsys.dmdata.x[:,4:],numpy.transpose(test_data_dm.x[:,4:]))**2)
+    dists = numpy.max(dists,axis=0)
+    w=dists < 1e15
+
+    # if True:
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(111)
+    #     objective_dm.plot_scatter_external(ax,test_data_dm.x[w],test_data_dm.y[w],label='dm',color='b')
+    #     objective_color.plot_scatter_external(ax,test_data.x[w],test_data.y[w],label='color',color='r')
+    #     objective_dm.plot_scatter_external(ax,dmsys.dmdata.x[w],dmsys.dmdata.y[w],label='dm',color='b',marker='x')
+    #     objective_color.plot_scatter_external(ax,train_data.x[w],train_data.y[w],label='color',color='r',marker='x')
+
+    #     ax.legend()
+    #     plt.show()
+    #     wefwe
+
+    if True:
         plt.clf()
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.scatter(objective_dm.frac_include,objective_dm.fvals,label='dm',color='b')
-        ax.scatter(objective_color.frac_include,objective_color.fvals,label='color',color='r')
+#        ax.scatter(objective_dm.frac_include,objective_dm.fvals,label='dm',color='b')
+#        ax.scatter(objective_color.frac_include,objective_color.fvals,label='color',color='r')
         objective_dm.plot_scatter_external(ax,test_data_dm.x,test_data_dm.y,label='dm',color='b',marker='x')
         objective_color.plot_scatter_external(ax,test_data.x,test_data.y,label='color',color='r',marker='x')
         ax.legend()

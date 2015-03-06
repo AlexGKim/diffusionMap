@@ -22,7 +22,8 @@ from sklearn.cross_validation import cross_val_score
 import sklearn.ensemble
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
-
+import sklearn.metrics.pairwise
+ 
 import copy
 mpl.rc('figure', figsize=(11,11))
 
@@ -55,7 +56,7 @@ class Plots:
 
         ndim=x.shape[1]-1
         if figax == 'default':
-            fig, axes = plt.subplots(nrows=ndim,ncols=ndim,sharex=True,sharey=True)
+            fig, axes = plt.subplots(nrows=ndim,ncols=ndim)#,sharex='col',sharey='row')
             #fig.tight_layout()
             fig.subplots_adjust(wspace = 0.15)
             fig.subplots_adjust(hspace = 0.15)
@@ -69,8 +70,9 @@ class Plots:
         for ic in xrange(ndim):
             for ir in xrange(ic,ndim):
                 axes[ir,ic].set_visible(True)
-                axes[ir,ic].scatter(x[:,ic],x[:,ir+1],**kwargs)
-                                            
+                axes[ir,ic].scatter(x[:,ic],x[:,ir+1],edgecolor='none',**kwargs)
+                # print ic,ir+1
+                # print x[0:2,ic],x[0:2,ir+1]                                            
                 #axes[ir,ic].legend(prop={'size':6,'alpha':1})
                 if xlabel is not None:
                     if ic==0:
@@ -257,7 +259,7 @@ class DiffusionMap:
        self.par = par  #for the moment eps_val
        self.key=label
        self.weight= numpy.array([2,2,1,1])
-       self.nvar = 4
+       self.nvar = 6
 
 
     def make_map(self):
@@ -291,6 +293,24 @@ class DiffusionMap:
 
         return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)[:,0:self.nvar]
 
+    def transform_full(self, x):
+
+        """ Method that calculates DM coordinates given input coordinates.
+
+        Parameters
+        ----------
+        x: '~numpy.ndarray'
+          Native coordinates for a set of points
+
+        Returns
+        -------
+        '~numpy.ndarray'
+          DM coordinates for a set of points
+        """
+
+        return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)
+
+
     def plot(self,ax, oplot=False, **kwargs):
         X=self.dmap['X']
         ax.scatter(X.T[0],X.T[1],X.T[2],**kwargs)
@@ -310,6 +330,8 @@ class DiffusionMap:
     def internal_coordinates(self):
         return self.dmap['X'][:,0:self.nvar]
 
+    def internal_coordinates_full(self):
+        return self.dmap['X']
 
 # New coordinate system is based on a set of diffusion maps
 class DMSystem:
@@ -343,13 +365,13 @@ class DMSystem:
 
     def config(self, good_inds, bad_inds, par):
         self.dm=[]
-        key = dict()
-        newmap=DiffusionMap(self.data[bad_inds],par[1],key)
-        key['dm']=newmap
-        key['bias']=False
-        key['zbin']=0
-        key['train_inds'] = bad_inds
-        self.dm.append(key)
+        # key = dict()
+        # newmap=DiffusionMap(self.data[bad_inds],par[1],key)
+        # key['dm']=newmap
+        # key['bias']=False
+        # key['zbin']=0
+        # key['train_inds'] = bad_inds
+        # self.dm.append(key)
 
         key = dict()
         newmap=DiffusionMap(self.data[good_inds],par[1],key)
@@ -394,19 +416,27 @@ class DMSystem:
 
         # renormalize the coordinates to be sane
         self.mns=[]
-        self.sigs=[]
+#        self.sigs=[]
+
         for index in xrange(ncoord):
             xso=numpy.sort(train_coordinates[:,index])
             l= len(xso)
-            xso=xso[l*.1:l*.9]
+            xso=xso[l*.2:l*.8]
             xmn = xso[len(xso)/2]
-            xsig = xso.std()
-            train_coordinates[:,index]=(train_coordinates[:,index]-xmn)/xsig
+#            xsig = xso.std()
+            train_coordinates[:,index]=(train_coordinates[:,index]-xmn)#/xsig
             self.mns.append(xmn)
-            self.sigs.append(xsig)
+#            self.sigs.append(xsig)
         self.mns=numpy.array(self.mns)
-        self.sigs=numpy.array(self.sigs)
-        self.dmdata = Data(train_coordinates,self.data.y,self.data.z)
+
+        xso = numpy.sort(train_coordinates)
+        l=len(xso)
+        xso=xso[l*.2:l*.8]
+        self.sig = xso.std()
+        train_coordinates = train_coordinates/self.sig
+
+        #self.sigs=numpy.array(self.sigs)
+        self.dmdata = Data(train_coordinates,self.data.y,self.data.z,xlabel=[str(i) for i in xrange(self.nvar)])
 
     def coordinates(self, x, par):
 
@@ -419,8 +449,10 @@ class DMSystem:
             coords=numpy.append(coords, dm['dm'].transform(x),axis=1)
 
         for index in xrange(len(self.mns)):
-            coords[:,index]=(coords[:,index]-self.mns[index])/self.sigs[index]
+            coords[:,index]=(coords[:,index]-self.mns[index])/self.sig
         return coords
+
+
 
 # import sklearn.ensemble
 # class MyRegressor(sklearn.ensemble.forest.ForestRegressor):
@@ -649,13 +681,113 @@ class Objective(object):
         test_score_color=numpy.array(test_score_color)
         test_score_color = -numpy.log(test_score_color)
         ax.scatter(self.frac_include,test_score_color,**kwargs)
-    @staticmethod
-    def crap(y, y_predict, y_var,eval_frac):
-        delta_y=y_predict-y
-        sin = numpy.argsort(y_var)
-        sin=sin[0:len(sin)*eval_frac]
-        delta_y=delta_y[sin]
-        return delta_y.std()
+    # @staticmethod
+    # def crap(y, y_predict, y_var,eval_frac):
+    #     delta_y=y_predict-y
+    #     sin = numpy.argsort(y_var)
+    #     sin=sin[0:len(sin)*eval_frac]
+    #     delta_y=delta_y[sin]
+    #     return delta_y.mean(),delta_y.std()
+
+def passlimit(output,o,frac):
+    w  = output.test_min_dist < output.train_cut
+    temp = numpy.sort(o.dy2[w])
+    limit = temp[frac*len(w)]
+    w2 = o.dy2 < limit
+    w3 = numpy.logical_and(w,w2)
+    return w3
+
+def meanuncertainties(test_data,output):
+    mns=[]
+    dmns=[]
+    sigs=[]
+    dsigs=[]
+    frac_include  =  0.01*1.5**numpy.arange(12)
+    frac_include = numpy.arange(0.05,.9,0.05)
+    # w  = output.test_min_dist < output.train_cut
+
+    allmn=[]
+    allsd=[]
+    for frac in frac_include:
+        mn=[]
+        sd=[]
+#        print frac,
+        for o in output.outputs:
+            w3=passlimit(output,o,frac)
+
+#             temp = numpy.sort(o.dy2[w])
+#             limit = temp[frac*len(w)]
+# #            print limit,
+#             w2 = o.dy2 < limit
+#             w3 = numpy.logical_and(w,w2)
+            d = o.y-test_data.y
+            d = d[w3]
+            mn.append(d.mean())
+            sd.append(d.std())
+ #       print
+        mn=numpy.array(mn)
+        sd=numpy.array(sd)
+        allmn.append(mn)
+        allsd.append(sd)
+        mns.append(mn.mean())
+        dmns.append(mn.std())
+        sigs.append(sd.mean())
+        dsigs.append(sd.std())
+        # plt.hist(sd)
+        # plt.show()
+    mns=numpy.array(mns)
+    dmns=numpy.array(dmns)
+    sigs=numpy.array(sigs)
+    dsigs=numpy.array(dsigs)
+    allmn=numpy.array(allmn)
+    allsd=numpy.array(allsd)
+    return frac_include, mns,dmns, sigs, dsigs, allmn,allsd
+
+    # # construct difference in y
+    # delta_y = []
+    # for o in output.outputs:
+    #     d = o.y-test_data.y
+
+
+    #     temp = numpy.sort(o.dy2[w])
+    #     w2 = o.dy2 < temp
+    #     w3 = numpy.logical_and(w,w2)
+    #     delta_y.append(delta_y[w3])
+
+
+
+
+    # dum=[]
+    # mns=[]
+    # for frac in frac_include:
+    #     dum2=[]
+    #     mn2=[]
+    #     for color_out in output.outputs:
+    #         w= output.test_min_dist<output.train_cut
+    #         mn, sig = Objective.crap(test_data.y[w], color_out.y[w],color_out.dy2[w],frac)
+    #         dum2.append(sig)
+    #         mn2.append(mn)
+    #     dum2=numpy.array(dum2)
+    #     dum.append(dum2)
+    #     mn2=numpy.array(mn2)
+    #     mns.append(mn2)
+
+    # dum=numpy.array(dum)
+    # mns=numpy.array(mns)
+    # means = dum.mean(axis=1)
+    # stds = dum.std(axis=1)
+
+    # return frac_include,mns.mean(axis=1),mns.std(axis=1),dum.mean(axis=1),dum.std(axis=1)
+
+def ok(x):
+    w=x[:,5]>0.001
+    w=x[:,5]<0
+    w=numpy.logical_and(w,x[:,4]>5e-3)
+    w=x[:,3]<-0.1
+    w=x[:,5]>0
+    w=numpy.logical_and(w,x[:,3]>0.01)
+    w=numpy.logical_and(w,x[:,4]>2e-4)
+    return w
 
 if __name__ == '__main__':
 
@@ -669,31 +801,13 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([0.02,0.0025])
+    x0 = numpy.array([0.05,0.0025*2.5])
+    x0 = numpy.array([1,0.0025])
 
     prob=0.9
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
-
-    # plt.scatter(train_data.y,train_data.z)
-    # plt.show()
-    # wef
-
-
-
-
-    # if doplot:
-    #     #plot how well calssification works on test data
-    #     co = ClassifyOptimize(train_data.x,train_data.y,x0,ranges=((2,4),),Ns=3)
-    #     data_prob = co.predict(test_data.x)
-    #     data_predict=data_prob > prob
-
-    #     print test_data.y[data_predict].mean(), test_data.y[data_predict].std(), data_predict.sum()
-    #     figax,figax2=test_data.plotClassification(x0[0],data_predict)
-    #     pp.savefig(figax[0])
-    #     pp.savefig(figax2[0])
-    #     #plt.show()
 
     import os.path
     if os.path.isfile('dmsys.pkl'):
@@ -713,70 +827,295 @@ if __name__ == '__main__':
         pickle.dump(dmsys,pklfile)
     pklfile.close()
 
-    import sklearn.metrics.pairwise
-    prunefrac=0.9
+    filename='dmsys2.pkl'
+    if os.path.isfile(filename):
+        #print 'get pickle'
+        pklfile=open(filename,'r')
+        test_data_dm,test_data_dm_full=pickle.load(pklfile)
+    else:
+        # the new coordinate system based on the training data
+        test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z,
+            xlabel=[str(i) for i in xrange(dmsys.nvar)])
+        test_data_dm_full  = Data(dmsys.dm[0]['dm'].transform_full(test_data.x),test_data.y,test_data.z)
+        #print 'make pickle'
+        pklfile=open(filename,'w')
+        pickle.dump([test_data_dm,test_data_dm_full],pklfile)
+    pklfile.close()
 
-    train_dist = sklearn.metrics.pairwise_distances(train_data.x,train_data.x)
-    numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
-    train_min_dist=numpy.min(train_dist,axis=0)
-    train_sort = numpy.argsort(train_min_dist)
-    train_sort = train_sort[0:prunefrac * len(train_sort)]
-    train_cut =  train_sort[-1]
-    test_dist = sklearn.metrics.pairwise_distances(train_data.x[train_sort],test_data.x)
-    test_min_dist = numpy.min(test_dist,axis=0)
+    prunefrac=0.95
+    # train_dist = sklearn.metrics.pairwise_distances(dmsys.dmdata.x,dmsys.dmdata.x)
+    # numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+    # train_min_dist=numpy.min(train_dist,axis=0)
+    # train_sort = numpy.argsort(train_min_dist)
+    # train_sort = train_sort[0:prunefrac * len(train_sort)]
+    # train_cut =  train_sort[-1]
+    # test_dist = sklearn.metrics.pairwise_distances(dmsys.dmdata.x,test_data_dm.x)
+    # test_min_dist = numpy.min(test_dist,axis=0)
+    # test_sort =  numpy.sort(test_min_dist)
+    # w = test_min_dist < test_sort[len(test_sort)*prunefrac]
+#     plt.clf()
+    # figax= train_data.plot(color='r',alpha=0.1,s=10)
+    # train_data.plot(lambda x: numpy.abs(train_data.y) >0.1, color='b',alpha=0.5,s=20,figax=figax)
+    # plt.show()
 
-    clf = sklearn.ensemble.forest.RandomForestRegressor(n_estimators=20,random_state=12)
-    dum=[]
-    frac_include  =  0.01*1.5**numpy.arange(12)
-    for rs in xrange(10):
-        clf.set_params(random_state=rs)
-        clf.fit(train_data.x[train_sort],train_data.y[train_sort])
-        y,dy = clf.predict(test_data.x[test_min_dist<train_cut])
-        dum2=[]
-        for frac in frac_include:
-            dum2.append(Objective.crap(test_data.y[test_min_dist<train_cut],y,
-                dy,frac))
-        dum2=numpy.array(dum2)
-        dum.append(dum2)
-    dum=numpy.array(dum)
-    print dum
-    means = dum.mean(axis=0)
-    stds = dum.std(axis=0)
-    for a,b,c in zip(frac_include,means,stds):
-        print a,b,c
+#    plt.savefig('temp1.png')
+    # figax= dmsys.dmdata.plot(color='r',alpha=0.1,s=10)
+    # dmsys.dmdata.plot(lambda x: numpy.abs(test_data_dm.y) > 0.05, color='b',alpha=0.5,s=20,figax=figax)
+    # plt.savefig('temp.png')
+    # figax= dmsys.dmdata.plot(color='r',alpha=0.1,s=10,nsig=20)
+    # dmsys.dmdata.plot(lambda x: numpy.abs(test_data_dm.y) > 0.05, color='b',alpha=0.5,s=20,figax=figax)
+    # plt.savefig('temp2.png')
+
+    # wef
+# #    plt.savefig('temp2.png')
+    # figax= test_data_dm.plot(color='r',alpha=0.1,s=10)
+    # test_data_dm.plot(lambda x: numpy.abs(test_data_dm.y) >x0[0], color='b',alpha=0.5,s=20,figax=figax)
+    # plt.show()
+    #    plt.savefig('temp3.png')
 
 
-    test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z)
-    train_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,0:4],dmsys.dmdata.x[:,0:4])**2+
-        sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,4:],dmsys.dmdata.x[:,4:])**2)
-    numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
-    train_min_dist=numpy.min(train_dist,axis=0)
-    train_sort = numpy.argsort(train_min_dist)
-    train_sort = train_sort[0:prunefrac * len(train_sort)]
-    train_cut =  train_sort[-1]
-    test_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,0:4],test_data_dm.x[:,0:4])**2+
-        sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,4:],test_data_dm.x[:,4:])**2)
-    test_min_dist = numpy.min(test_dist,axis=0)
-    dum=[]
-    for rs in xrange(10):
-        clf.fit(dmsys.dmdata.x[train_sort],dmsys.dmdata.y[train_sort])
-        y,dy = clf.predict(test_data_dm.x[test_min_dist<train_cut])
-        dum2=[]
-        for frac in frac_include:
-            dum2.append(Objective.crap(test_data_dm.y[test_min_dist<train_cut],y,dy,frac))
-        dum2=numpy.array(dum2)
-        print frac,dum2.mean(),dum2.std()
-    dum.append(dum2)
-    dum=numpy.array(dum)
 
+#     wefe
+    import matplotlib.cm
+    import matplotlib.colors
+    ## plots that show dm x in color space
+    if doplot:
+        for i in xrange(6):
+            crap = numpy.sort(dmsys.dmdata.x[:,i])
+            crap= crap[len(crap)*.1:len(crap)*.9]
+            sig = crap.std()
+            cm=matplotlib.cm.ScalarMappable(
+                norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
+                    vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
+            cval=cm.to_rgba(dmsys.dmdata.x[:,i])
+            figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
+            figax[0].suptitle(str(i))
+            plt.savefig('splits.'+str(i)+'.png')
+        wef
+        print test_data.y.mean(), test_data.y.std()
+        w=ok(test_data_dm.x)
+        print test_data.y[w].mean(), test_data.y[w].std()
+        print len(test_data.y),w.sum()
+        plt.clf()
+        figax= test_data.plot(label='0.3',color='k',alpha=0.1,s=10)
+        test_data.plot(lambda x: w, label='0.2',color='b',alpha=1,s=10,figax=figax)
+        plt.show()
+        wefe
+
+    #get distances
+    
+    catastrophic = numpy.abs(test_data.y)>0.05
+    dist = sklearn.metrics.pairwise_distances(dmsys.dm[0]['dm'].internal_coordinates_full[:,catastrophic],
+        test_data_dm_full.x)
+
+    prunefrac=0.95
+
+ 
+    class OneOutput(object):
+        """docstring for OneOutput"""
+        def __init__(self, feature_importances_,y,dy2):
+            super(OneOutput, self).__init__()
+            self.feature_importances_ = feature_importances_
+            self.y=y
+            self.dy2=dy2
+            
+    class Output(object):
+        """docstring for Output"""
+        def __init__(self,test_min_dist,train_cut, outputs):
+            super(Output, self).__init__()
+            self.test_min_dist=test_min_dist
+            self.train_cut=train_cut
+            self.outputs=outputs
+    filename='output.pkl'
+
+    if os.path.isfile(filename):
+        #print 'get pickle'
+        pklfile=open(filename,'r')
+        coloroutput,dmoutput=pickle.load(pklfile)
+    else:
+        nrealize=100
+        train_dist = sklearn.metrics.pairwise_distances(train_data.x,train_data.x)
+        numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+        train_min_dist=numpy.min(train_dist,axis=0)
+        train_sort = numpy.argsort(train_min_dist)
+        train_sort = train_sort[0:prunefrac * len(train_sort)]
+        train_cut =  train_min_dist[train_sort[-1]]
+        test_dist = sklearn.metrics.pairwise_distances(train_data.x[train_sort],test_data.x)
+        test_min_dist = numpy.min(test_dist,axis=0)
+
+        clf = sklearn.ensemble.forest.RandomForestRegressor(n_estimators=100,random_state=12)
+        color_outs=[]
+        for rs in xrange(nrealize):
+            clf.set_params(random_state=rs)
+            clf.fit(train_data.x[train_sort],train_data.y[train_sort])
+            y,dy2 = clf.predict(test_data.x)
+            color_outs.append(OneOutput(clf.feature_importances_,y,dy2))
+        coloroutput=Output(test_min_dist,train_cut,color_outs)
+
+        train_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,0:4],dmsys.dmdata.x[:,0:4])**2+
+            sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,4:],dmsys.dmdata.x[:,4:])**2)
+        numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+        train_min_dist=numpy.min(train_dist,axis=0)
+        train_sort = numpy.argsort(train_min_dist)
+        train_sort = train_sort[0:prunefrac * len(train_sort)]
+        train_cut =  train_min_dist[train_sort[-1]]
+        test_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,0:4],
+            test_data_dm.x[:,0:4])**2+sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,4:]
+            ,test_data_dm.x[:,4:])**2)
+        test_min_dist = numpy.min(test_dist,axis=0)
+
+        dm_outs=[]
+        for rs in xrange(nrealize):
+            clf.set_params(random_state=rs)
+            clf.fit(dmsys.dmdata.x[train_sort],dmsys.dmdata.y[train_sort])
+            y,dy2 = clf.predict(test_data_dm.x)
+            dm_outs.append(OneOutput(clf.feature_importances_,y,dy2))
+        dmoutput=Output(test_min_dist,train_cut,dm_outs)
+
+        pklfile=open(filename,'w')
+        pickle.dump([coloroutput,dmoutput],pklfile)
+    pklfile.close()
+
+
+    # w  = dmoutput.test_min_dist < dmoutput.train_cut
+    # plt.scatter(dmoutput.test_min_dist, dmoutput.outputs[0].y-test_data_dm.y)
+    # plt.xlim(0,dmoutput.train_cut*2)
+    # plt.show()
+
+    w  = coloroutput.test_min_dist < coloroutput.train_cut
+    plt.scatter(coloroutput.test_min_dist, coloroutput.outputs[0].y-test_data_dm.y)
+    plt.xlim(0,coloroutput.train_cut*2)
+    plt.show()
+
+    plt.scatter(dmoutput.outputs[0].dy2[w],dmoutput.outputs[0].y[w]-test_data_dm.y[w])
+    plt.show()
+
+    wef
+
+    if doplot:      
+        plt.clf()
+        figax= test_data.plot(label='0.3',color='k',alpha=0.1,s=10)
+        test_data.plot(lambda x: passlimit(dmoutput,dmoutput.outputs[0],0.2), label='0.2',color='b',alpha=1,s=10,figax=figax)
+        test_data.plot(lambda x: passlimit(dmoutput,dmoutput.outputs[0],0.1) , label='0.1',color='r',alpha=1,s=10,
+            figax=figax)
+        plt.show()
+
+        plt.clf()
+        figax= test_data_dm.plot(label='0.3',color='k',alpha=0.1,s=10,nsig=4)
+        test_data_dm.plot(lambda x: passlimit(dmoutput,dmoutput.outputs[0],0.2),nsig=4, label='0.2',color='b',alpha=1,s=10,figax=figax)
+        test_data_dm.plot(lambda x: passlimit(dmoutput,dmoutput.outputs[0],0.1),nsig=4 , label='0.1',color='r',alpha=1,s=10,
+            figax=figax)
+        plt.show()
+
+        plt.clf()
+        figax= test_data.plot(label='0.3',color='k',alpha=0.1,s=10)
+        test_data.plot(lambda x: passlimit(coloroutput,coloroutput.outputs[0],0.2), label='0.2',color='b',alpha=1,s=10,figax=figax)
+        test_data.plot(lambda x: passlimit(coloroutput,coloroutput.outputs[0],0.1) , label='0.1',color='r',alpha=1,s=10,
+            figax=figax)
+        plt.show()
+
+        figax= test_data_dm.plot(label='0.3',color='k',nsig=4,alpha=0.1,s=10)
+        test_data_dm.plot(lambda x: passlimit(coloroutput,coloroutput.outputs[0],0.2), label='0.2',color='b',nsig=4,alpha=1,s=10,figax=figax)
+        test_data_dm.plot(lambda x: passlimit(coloroutput,coloroutput.outputs[0],0.1) , label='0.1',color='r',nsig=4,alpha=1,s=10,
+            figax=figax)
+        plt.show()
+
+    c1,c2,c3,c4,c5, c6, c7 = meanuncertainties(test_data,coloroutput)
+    d1,d2,d3,d4,d5,d6,d7= meanuncertainties(test_data_dm,dmoutput)
+    # ind=0
+    # plt.clf()
+    # fig=plt.figure()
+    # ax = fig.add_subplot(111)
+    # ax.plot(c6[ind,:],label='c')
+    # ax.plot(d6[ind,:],label='d')
+    # plt.legend()
+    # plt.show()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.errorbar(c1,c2,yerr=c3,label='color',marker='o',color='b')
+    ax.errorbar(d1,d2,yerr=d3,label='dm',marker='o',color='r')
+    plt.legend()
+    plt.show()
     fwe
-    # if doplot:
-    #     for index in xrange(8):
-    #         fig = plt.figure()
-    #         ax = fig.add_subplot(111)
-    #         ax.scatter(dmsys.dmdata.x[:,index],dmsys.dmdata.y)
-    #         ax.set_xlim((-20,20))
-    #     plt.show()
+    # for a,b,c, d, e in zip(frac_include,mns.mean(axis=1),mns.std(axis=1),means,stds):
+    #     print "{:5.3f} {:7.4f} {:6.4f} {:6.4f} {:6.4f}".format(a,b,c, d, e)
+
+
+
+#     wefew
+#     dum=[]
+#     train_dist = sklearn.metrics.pairwise_distances(train_data.x,train_data.x)
+#     numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+#     train_min_dist=numpy.min(train_dist,axis=0)
+#     train_sort = numpy.argsort(train_min_dist)
+#     train_sort = train_sort[0:prunefrac * len(train_sort)]
+#     train_cut =  train_sort[-1]
+#     test_dist = sklearn.metrics.pairwise_distances(train_data.x[train_sort],test_data.x)
+#     test_min_dist = numpy.min(test_dist,axis=0)
+
+#     clf = sklearn.ensemble.forest.RandomForestRegressor(n_estimators=100,random_state=12)
+#     for rs in xrange(10):
+#         clf.set_params(random_state=rs)
+#         clf.fit(train_data.x[train_sort],train_data.y[train_sort])
+
+# #        y,dy = clf.predict(test_data.x[test_min_dist<train_cut])
+#         y,dy = clf.predict(test_data.x)
+#         dum2=[]
+#         w= test_min_dist<train_cut
+#         for frac in frac_include:
+#             dum2.append(Objective.crap(test_data.y[w],y[w],
+#                 dy[w],frac)[1])
+#             # dum2.append(Objective.crap(test_data.y[test_min_dist<train_cut],y,
+#             #     dy,frac)[1])
+#         dum2=numpy.array(dum2)
+#         dum.append(dum2)
+#     dum=numpy.array(dum)
+#     print dum
+#     wefwe
+#     means = dum.mean(axis=0)
+#     stds = dum.std(axis=0)
+#     for a,b,c in zip(frac_include,means,stds):
+#         print a,b,c
+
+#     wefe
+
+    # frac_include  =  0.01*1.5**numpy.arange(12)
+    
+    # train_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,0:4],dmsys.dmdata.x[:,0:4])**2+
+    #     sklearn.metrics.pairwise_distances(dmsys.dmdata.x[:,4:],dmsys.dmdata.x[:,4:])**2)
+    # numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+    # train_min_dist=numpy.min(train_dist,axis=0)
+    # train_sort = numpy.argsort(train_min_dist)
+    # train_sort = train_sort[0:prunefrac * len(train_sort)]
+    # train_cut =  train_sort[-1]
+    # test_dist = numpy.sqrt(sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,0:4],test_data_dm.x[:,0:4])**2+
+    #     sklearn.metrics.pairwise_distances(dmsys.dmdata.x[train_sort][:,4:],test_data_dm.x[:,4:])**2)
+    # test_min_dist = numpy.min(test_dist,axis=0)
+    # dum=[]
+    # clf = sklearn.ensemble.forest.RandomForestRegressor(n_estimators=50,random_state=12)
+    # for rs in xrange(10):
+    #     clf.fit(dmsys.dmdata.x[train_sort],dmsys.dmdata.y[train_sort])
+    #     y,dy = clf.predict(test_data_dm.x[test_min_dist<train_cut])
+    #     print Objective.crap(test_data_dm.y[test_min_dist<train_cut],y,dy,0.01)
+        
+    #     # dum2=[]
+    #     # for frac in frac_include:
+    #     #     dum2.append(Objective.crap(test_data_dm.y[test_min_dist<train_cut],y,dy,frac)[1])
+    #     #     dum2=numpy.array(dum2)
+    #     # print frac,dum2.mean(),dum2.std()
+    # wefwf
+    # dum.append(dum2)
+    # dum=numpy.array(dum)
+
+    # fwe
+    if doplot:
+        for index in xrange(8):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.scatter(dmsys.dmdata.x[:,index],dmsys.dmdata.y)
+            ax.set_xlim((-20,20))
+        plt.show()
     import matplotlib.collections
     import matplotlib.lines
     import matplotlib.patches

@@ -6,26 +6,27 @@ task.'''
 __author__ = 'Alex Kim <agkim@lbl.gov>'
 
 import os
+import os.path
 import pickle
-#import numpy as np
-#import matplotlib
+import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.cm
+import matplotlib.colors
+#import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
 import numpy
 from argparse import ArgumentParser
-import diffuse
 import scipy
 from scipy.stats import norm
 import sklearn
 from sklearn.cross_validation import cross_val_score
 import sklearn.ensemble
-from matplotlib.backends.backend_pdf import PdfPages
-import matplotlib as mpl
 import sklearn.metrics.pairwise
- 
+import diffuse
 import copy
-mpl.rc('figure', figsize=(11,11))
+matplotlib.rc('figure', figsize=(11,11))
 
 """
 For the moment, the redshift range that we consider are set as global
@@ -52,9 +53,11 @@ from matplotlib.legend_handler import HandlerNpoints
 
 class Plots:
     @staticmethod
-    def x(x,xlabel=None, figax='default',nsig=None,**kwargs):
+    def x(x,xlabel=None, figax='default',nsig=None,ndim=None, **kwargs):
 
-        ndim=x.shape[1]-1
+        if ndim is None:
+            ndim=x.shape[1]-1
+
         if figax == 'default':
             fig, axes = plt.subplots(nrows=ndim,ncols=ndim)#,sharex='col',sharey='row')
             #fig.tight_layout()
@@ -128,6 +131,9 @@ class Data:
 
     def __getitem__(self , index):
         return Data(self.x[index],self.y[index],self.z[index])
+
+    def ndata(self):
+        return len(self.y)
 
     def lessthan(self, thresh):
         return self.y < thresh
@@ -259,8 +265,6 @@ class DiffusionMap:
        self.par = par  #for the moment eps_val
        self.key=label
        self.weight= numpy.array([2,2,1,1])
-       self.nvar = 6
-
 
     def make_map(self):
 
@@ -270,30 +274,15 @@ class DiffusionMap:
 
         kwargs=dict()
         kwargs['eps_val'] = self.par.item()
+        print kwargs['eps_val']
         kwargs['t']=1
         kwargs['delta']=1e-8
         kwargs['var']=0.95
 
         self.dmap = diffuse.diffuse(self.data.x*self.weight,**kwargs)
+        self.neigen = self.dmap['neigen']
 
     def transform(self, x):
-
-        """ Method that calculates DM coordinates given input coordinates.
-
-        Parameters
-        ----------
-        x: '~numpy.ndarray'
-          Native coordinates for a set of points
-
-        Returns
-        -------
-        '~numpy.ndarray'
-          DM coordinates for a set of points
-        """
-
-        return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)[:,0:self.nvar]
-
-    def transform_full(self, x):
 
         """ Method that calculates DM coordinates given input coordinates.
 
@@ -327,297 +316,129 @@ class DiffusionMap:
             ax.set_ylabel('X[1]')
             ax.set_zlabel('X[2]')
 
-    def internal_coordinates(self):
-        return self.dmap['X'][:,0:self.nvar]
-
-    def internal_coordinates_full(self):
-        return self.dmap['X']
-
-# New coordinate system is based on a set of diffusion maps
-class DMSystem:
-    """ Class that manages the new coordinate system we want.
-    The new system is the union of several diffusion maps.
-
-    Parameters
-    ----------
-    data : Data
-       Data that enters into the diffusion maps
-    """
-    @staticmethod
-    def hasTrainingAnalog(dmcoords):
-        ans = numpy.empty(dmcoords.shape[0],dtype='bool')
-
-        for i in xrange(dmcoords.shape[0]):
-            ans[i] = not numpy.isnan(dmcoords[i,:]).any()
-
-        return ans
+    def data_dm(self):
+        return Data(self.dmap['X'],self.data.y,self.data.z,xlabel=[str(i) for i in xrange(self.neigen)])
 
 
-    def __init__(self, data, config = 'default'):
-        self.data = data 
-        
-        self.state = None
-
-        # if config == 'default':
-        #     self.config = self._onebad
-        # else:
-        #     self.config = self._redshift_bins
-
-    def config(self, good_inds, bad_inds, par):
-        self.dm=[]
-        # key = dict()
-        # newmap=DiffusionMap(self.data[bad_inds],par[1],key)
-        # key['dm']=newmap
-        # key['bias']=False
-        # key['zbin']=0
-        # key['train_inds'] = bad_inds
-        # self.dm.append(key)
-
-        key = dict()
-        newmap=DiffusionMap(self.data[good_inds],par[1],key)
-        key['dm']=newmap
-        key['bias']=True
-        key['zbin']=0
-        key['train_inds'] = good_inds
-        self.dm.append(key)
-
-        self.nvar = 0
-        for dm in self.dm:
-            self.nvar = self.nvar+dm['dm'].nvar
-
-    def create_dm(self, par):
-
-        if numpy.array_equal(self.state,par):
-            return
-        bias = self.data.y
-
-    # Split into "good" and "bad" samples
-        good_inds = numpy.abs(bias) <= par[0]
-        bad_inds = numpy.logical_not(good_inds)
-        self.good_inds= good_inds
-        self.bad_inds=bad_inds
-        self.config(good_inds, bad_inds, par)
-
-
-
-        self.state = numpy.array(par)
-
-        train_coordinates = numpy.zeros((len(self.data.x),  self.nvar))
-
-        # put the new coordinates into a data
-        ncoord=0
-        for dm in self.dm:
-            dm['dm'].make_map()
-            train_coordinates[dm['train_inds'],ncoord:ncoord+dm['dm'].nvar]= \
-                dm['dm'].internal_coordinates()
-            train_coordinates[numpy.logical_not(dm['train_inds']),ncoord:ncoord+dm['dm'].nvar]= \
-                dm['dm'].transform(self.data.x[numpy.logical_not(dm['train_inds'])])
-            ncoord=ncoord+dm['dm'].nvar
-
-        # renormalize the coordinates to be sane
-        self.mns=[]
-#        self.sigs=[]
-
-        for index in xrange(ncoord):
-            xso=numpy.sort(train_coordinates[:,index])
-            l= len(xso)
-            xso=xso[l*.2:l*.8]
-            xmn = xso[len(xso)/2]
-#            xsig = xso.std()
-            train_coordinates[:,index]=(train_coordinates[:,index]-xmn)#/xsig
-            self.mns.append(xmn)
-#            self.sigs.append(xsig)
-        self.mns=numpy.array(self.mns)
-
-        xso = numpy.sort(train_coordinates)
-        l=len(xso)
-        xso=xso[l*.2:l*.8]
-        self.sig = xso.std()
-        train_coordinates = train_coordinates/self.sig
-
-        #self.sigs=numpy.array(self.sigs)
-        self.dmdata = Data(train_coordinates,self.data.y,self.data.z,xlabel=[str(i) for i in xrange(self.nvar)])
-
-    def coordinates(self, x, par):
-
-        # if the current state of the diffusion maps is not equal
-        # to what is requested make them
-        self.create_dm(par)
-
-        coords = numpy.empty((len(x),0))
-        for dm in self.dm:
-            coords=numpy.append(coords, dm['dm'].transform(x),axis=1)
-
-        for index in xrange(len(self.mns)):
-            coords[:,index]=(coords[:,index]-self.mns[index])/self.sig
-        return coords
-
-
-
-# import sklearn.ensemble
-# class MyRegressor(sklearn.ensemble.forest.ForestRegressor):
-#     """A random forest regressor.
-
-#     A random forest is a meta estimator that fits a number of classifying
-#     decision trees on various sub-samples of the dataset and use averaging
-#     to improve the predictive accuracy and control over-fitting.
+# # New coordinate system is based on a set of diffusion maps
+# class DMSystem:
+#     """ Class that manages the new coordinate system we want.
+#     The new system is the union of several diffusion maps.
 
 #     Parameters
 #     ----------
-#     n_estimators : integer, optional (default=10)
-#         The number of trees in the forest.
-
-#     criterion : string, optional (default="mse")
-#         The function to measure the quality of a split. The only supported
-#         criterion is "mse" for the mean squared error.
-#         Note: this parameter is tree-specific.
-
-#     max_features : int, float, string or None, optional (default="auto")
-#         The number of features to consider when looking for the best split:
-
-#         - If int, then consider `max_features` features at each split.
-#         - If float, then `max_features` is a percentage and
-#           `int(max_features * n_features)` features are considered at each
-#           split.
-#         - If "auto", then `max_features=n_features`.
-#         - If "sqrt", then `max_features=sqrt(n_features)`.
-#         - If "log2", then `max_features=log2(n_features)`.
-#         - If None, then `max_features=n_features`.
-
-#         Note: the search for a split does not stop until at least one
-#         valid partition of the node samples is found, even if it requires to
-#         effectively inspect more than ``max_features`` features.
-#         Note: this parameter is tree-specific.
-
-#     max_depth : integer or None, optional (default=None)
-#         The maximum depth of the tree. If None, then nodes are expanded until
-#         all leaves are pure or until all leaves contain less than
-#         min_samples_split samples.
-#         Ignored if ``max_samples_leaf`` is not None.
-#         Note: this parameter is tree-specific.
-
-#     min_samples_split : integer, optional (default=2)
-#         The minimum number of samples required to split an internal node.
-#         Note: this parameter is tree-specific.
-
-#     min_samples_leaf : integer, optional (default=1)
-#         The minimum number of samples in newly created leaves.  A split is
-#         discarded if after the split, one of the leaves would contain less then
-#         ``min_samples_leaf`` samples.
-#         Note: this parameter is tree-specific.
-
-#     max_leaf_nodes : int or None, optional (default=None)
-#         Grow trees with ``max_leaf_nodes`` in best-first fashion.
-#         Best nodes are defined as relative reduction in impurity.
-#         If None then unlimited number of leaf nodes.
-#         If not None then ``max_depth`` will be ignored.
-#         Note: this parameter is tree-specific.
-
-#     bootstrap : boolean, optional (default=True)
-#         Whether bootstrap samples are used when building trees.
-
-#     oob_score : bool
-#         whether to use out-of-bag samples to estimate
-#         the generalization error.
-
-#     n_jobs : integer, optional (default=1)
-#         The number of jobs to run in parallel for both `fit` and `predict`.
-#         If -1, then the number of jobs is set to the number of cores.
-
-#     random_state : int, RandomState instance or None, optional (default=None)
-#         If int, random_state is the seed used by the random number generator;
-#         If RandomState instance, random_state is the random number generator;
-#         If None, the random number generator is the RandomState instance used
-#         by `np.random`.
-
-#     verbose : int, optional (default=0)
-#         Controls the verbosity of the tree building process.
-
-#     Attributes
-#     ----------
-#     `estimators_`: list of DecisionTreeRegressor
-#         The collection of fitted sub-estimators.
-
-#     `feature_importances_` : array of shape = [n_features]
-#         The feature importances (the higher, the more important the feature).
-
-#     `oob_score_` : float
-#         Score of the training dataset obtained using an out-of-bag estimate.
-
-#     `oob_prediction_` : array of shape = [n_samples]
-#         Prediction computed with out-of-bag estimate on the training set.
-
-#     References
-#     ----------
-
-#     .. [1] L. Breiman, "Random Forests", Machine Learning, 45(1), 5-32, 2001.
-
-#     See also
-#     --------
-#     DecisionTreeRegressor, ExtraTreesRegressor
+#     data : Data
+#        Data that enters into the diffusion maps
 #     """
-#     def __init__(self, eval_frac=0.1,
-#                  n_estimators=10,
-#                  criterion="mse",
-#                  max_depth=None,
-#                  min_samples_split=2,
-#                  min_samples_leaf=1,
-#                  max_features="auto",
-#                  max_leaf_nodes=None,
-#                  bootstrap=True,
-#                  oob_score=False,
-#                  n_jobs=1,
-#                  random_state=None,
-#                  verbose=0,
-#                  min_density=None,
-#                  compute_importances=None):
-#         super(MyRegressor, self).__init__(
-#             base_estimator=sklearn.ensemble.forest.DecisionTreeRegressor(),
-#             n_estimators=n_estimators,
-#             estimator_params=("criterion", "max_depth", "min_samples_split",
-#                               "min_samples_leaf", "max_features",
-#                               "max_leaf_nodes", "random_state"),
-#             bootstrap=bootstrap,
-#             oob_score=oob_score,
-#             n_jobs=n_jobs,
-#             random_state=random_state,
-#             verbose=verbose)
+#     @staticmethod
+#     def hasTrainingAnalog(dmcoords):
+#         ans = numpy.empty(dmcoords.shape[0],dtype='bool')
 
-#         self.eval_frac=eval_frac
-#         self.criterion = criterion
-#         self.max_depth = max_depth
-#         self.min_samples_split = min_samples_split
-#         self.min_samples_leaf = min_samples_leaf
-#         self.max_features = max_features
-#         self.max_leaf_nodes = max_leaf_nodes
+#         for i in xrange(dmcoords.shape[0]):
+#             ans[i] = not numpy.isnan(dmcoords[i,:]).any()
 
-#         if min_density is not None:
-#             warn("The min_density parameter is deprecated as of version 0.14 "
-#                  "and will be removed in 0.16.", DeprecationWarning)
+#         return ans
 
-#         if compute_importances is not None:
-#             warn("Setting compute_importances is no longer required as "
-#                  "version 0.14. Variable importances are now computed on the "
-#                  "fly when accessing the feature_importances_ attribute. "
-#                  "This parameter will be removed in 0.16.",
-#                  DeprecationWarning)
 
-#     def score(self,X, y, sample_weight=None):
-#         return (self.score_info(X, y, sample_weight=sample_weight))[0]
-# #         y_predict, y_var =self.predict(X)
-# #         delta_y=y_predict-y
-# #         sin = numpy.argsort(y_var)
-# #         sin=sin[0:len(sin)*self.eval_frac]
-# #         delta_y=delta_y[sin]
-# #         return numpy.exp(-delta_y.std())
+#     def __init__(self, data, config = 'default'):
+#         self.data = data 
+        
+#         self.state = None
 
-#     def score_info(self,X, y, sample_weight=None):
-#         y_predict, y_var =self.predict(X)
-#         delta_y=y_predict-y
-#         sin = numpy.argsort(y_var)
-#         sin=sin[0:len(sin)*self.eval_frac]
-#         delta_y=delta_y[sin]
-#         return numpy.exp(-delta_y.std()),sin
+#         # if config == 'default':
+#         #     self.config = self._onebad
+#         # else:
+#         #     self.config = self._redshift_bins
+
+#     def config(self, good_inds, bad_inds, par):
+#         self.dm=[]
+#         # key = dict()
+#         # newmap=DiffusionMap(self.data[bad_inds],par[1],key)
+#         # key['dm']=newmap
+#         # key['bias']=False
+#         # key['zbin']=0
+#         # key['train_inds'] = bad_inds
+#         # self.dm.append(key)
+
+#         key = dict()
+#         newmap=DiffusionMap(self.data[good_inds],par[1],key)
+#         key['dm']=newmap
+#         key['bias']=True
+#         key['zbin']=0
+#         key['train_inds'] = good_inds
+#         self.dm.append(key)
+
+#         self.nvar = 0
+#         for dm in self.dm:
+#             self.nvar = self.nvar+dm['dm'].nvar
+
+#     def create_dm(self, par):
+
+#         if numpy.array_equal(self.state,par):
+#             return
+#         bias = self.data.y
+
+#     # Split into "good" and "bad" samples
+#         good_inds = numpy.abs(bias) <= par[0]
+#         bad_inds = numpy.logical_not(good_inds)
+#         self.good_inds= good_inds
+#         self.bad_inds=bad_inds
+#         self.config(good_inds, bad_inds, par)
+
+
+
+#         self.state = numpy.array(par)
+
+#         train_coordinates = numpy.zeros((len(self.data.x),  self.nvar))
+
+#         # put the new coordinates into a data
+#         ncoord=0
+#         for dm in self.dm:
+#             dm['dm'].make_map()
+#             train_coordinates[dm['train_inds'],ncoord:ncoord+dm['dm'].nvar]= \
+#                 dm['dm'].internal_coordinates()
+#             train_coordinates[numpy.logical_not(dm['train_inds']),ncoord:ncoord+dm['dm'].nvar]= \
+#                 dm['dm'].transform(self.data.x[numpy.logical_not(dm['train_inds'])])
+#             ncoord=ncoord+dm['dm'].nvar
+
+#         # renormalize the coordinates to be sane
+#         self.mns=[]
+# #        self.sigs=[]
+
+#         for index in xrange(ncoord):
+#             xso=numpy.sort(train_coordinates[:,index])
+#             l= len(xso)
+#             xso=xso[l*.2:l*.8]
+#             xmn = xso[len(xso)/2]
+# #            xsig = xso.std()
+#             train_coordinates[:,index]=(train_coordinates[:,index]-xmn)#/xsig
+#             self.mns.append(xmn)
+# #            self.sigs.append(xsig)
+#         self.mns=numpy.array(self.mns)
+
+#         xso = numpy.sort(train_coordinates)
+#         l=len(xso)
+#         xso=xso[l*.2:l*.8]
+#         self.sig = xso.std()
+#         train_coordinates = train_coordinates/self.sig
+
+#         #self.sigs=numpy.array(self.sigs)
+#         self.dmdata = Data(train_coordinates,self.data.y,self.data.z,xlabel=[str(i) for i in xrange(self.nvar)])
+
+#     def coordinates(self, x, par):
+
+#         # if the current state of the diffusion maps is not equal
+#         # to what is requested make them
+#         self.create_dm(par)
+
+#         coords = numpy.empty((len(x),0))
+#         for dm in self.dm:
+#             coords=numpy.append(coords, dm['dm'].transform(x),axis=1)
+
+#         for index in xrange(len(self.mns)):
+#             coords[:,index]=(coords[:,index]-self.mns[index])/self.sig
+#         return coords
+
 
 class Objective(object):
     """docstring for Objective"""
@@ -779,19 +600,104 @@ def meanuncertainties(test_data,output):
 
     # return frac_include,mns.mean(axis=1),mns.std(axis=1),dum.mean(axis=1),dum.std(axis=1)
 
-def ok(x):
-    w=x[:,5]>0.001
-    w=x[:,5]<0
-    w=numpy.logical_and(w,x[:,4]>5e-3)
-    w=x[:,3]<-0.1
-    w=x[:,5]>0
-    w=numpy.logical_and(w,x[:,3]>0.01)
-    w=numpy.logical_and(w,x[:,4]>2e-4)
-    return w
+class MyEstimator(object):
+    """docstring for MyEstimator"""
+    def __init__(self, catastrophy_cut=numpy.float_(0.05), eps_val=numpy.float_(0.0025),mask_var=numpy.float_(1)):
+        super(MyEstimator, self).__init__()
+        self.catastrophy_cut=catastrophy_cut
+        self.eps_val=eps_val
+        self.mask_var=mask_var
+
+        self.outlier_cut=0.95
+        self.optimize_frac = 0.1
+
+    def fit(self, x, y):
+
+        self.catastrophy = numpy.abs(x.y) > self.catastrophy_cut
+
+        if doplot:
+            plt.clf()
+            figax= train_data.plot(color='b',alpha=0.1,s=10)
+            train_data.plot(lambda x: self.catastrophy, color='r',alpha=1,s=20,figax=figax)
+            plt.savefig('outliers.png')
+
+        if os.path.isfile('estimator.pkl'):
+            #print 'get pickle'
+            pklfile=open('estimator.pkl','r')
+            self.dm=pickle.load(pklfile)
+        else:
+            # the new coordinate system based on the training data
+            self.dm=DiffusionMap(x,self.eps_val)
+            self.dm.make_map()  
+            pklfile=open('estimator.pkl','w')
+            pickle.dump(self.dm,pklfile)
+        pklfile.close()
+        # self.dm=DiffusionMap(x,self.eps_val)
+        # self.dm.make_map()
+
+        if doplot:
+            plt.clf()
+            for i in xrange(6):
+                crap = numpy.sort(self.dm.data_dm().x[:,i])
+                crap= crap[len(crap)*.1:len(crap)*.9]
+                sig = crap.std()
+                cm=matplotlib.cm.ScalarMappable(
+                    norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
+                        vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
+                cval=cm.to_rgba(self.dm.data_dm().x[:,i])
+                figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
+                figax[0].suptitle(str(i))
+                plt.savefig('splits.'+str(i)+'.png')
+
+            figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
+            self.dm.data_dm().plot(lambda x: self.catastrophy,
+                color='b',alpha=0.5,s=20,ndim=6,figax=figax)
+            plt.savefig('temp.png')
+            figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
+            self.dm.data_dm().plot(lambda x: self.catastrophy,
+                color='b',alpha=0.5,s=20,ndim=6,figax=figax)
+            plt.savefig('temp2.png')
+
+        train_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,self.dm.data_dm().x)
+        catastrophy_distances = train_dist[numpy.outer(self.catastrophy,self.catastrophy)]
+        catastrophy_distances = catastrophy_distances[catastrophy_distances !=0]
+        catastrophy_distances = numpy.sort(catastrophy_distances)
+        numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
+        train_min_dist = numpy.min(train_dist,axis=0)
+        train_min_dist = numpy.sort(train_min_dist)
+        self.max_distance = train_min_dist[x.x.shape[0]*self.outlier_cut]
+
+        self.mask_scale = self.mask_var*catastrophy_distances[x.x.shape[0]*0.05]
+
+
+    def predict(self, x):
+        return 0
+    
+    def scorer(self,x,y):
+        x_dm = self.dm.transform(x.x)
+
+        test_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,x_dm)   
+        test_min_dist = numpy.min(test_dist,axis=0)
+
+        closer  = test_min_dist < self.max_distance
+
+        weight = numpy.exp(-(test_dist[self.catastrophy,:]/self.mask_scale)**2).sum(axis=0)
+        if doplot:  
+            plt.clf() 
+            cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
+            cval=cm.to_rgba(weight)
+            figax= x.plot(c=cval,alpha=0.1,s=20,cmap=cm)
+            plt.savefig('color_dm.png')
+
+        weight_sort=numpy.sort(weight)
+        w=weight < weight_sort[self.optimize_frac*x.ndata()]
+        w=numpy.logical_and(w,closer)
+
+        return 1./y[w].std()
 
 if __name__ == '__main__':
 
-    doplot = False
+    doplot = True
     parser = ArgumentParser()
     parser.add_argument('test_size', nargs='?',default=0.1)
     parser.add_argument('seed', nargs='?',default=9)
@@ -802,49 +708,114 @@ if __name__ == '__main__':
     rs = numpy.random.RandomState(pdict['seed'])
 
     x0 = numpy.array([0.05,0.0025*2.5])
-    x0 = numpy.array([1,0.0025])
 
-    prob=0.9
+    optimization_frac = 0.1
+    outlier_cut = 0.95
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
 
-    import os.path
+
+    estimator = MyEstimator()
+    estimator.fit(train_data, train_data)
+    print estimator.scorer(test_data, test_data.y)
+
+    # optimize
+
+    param_grid = [{'outlier_cut': numpy.arange(0.02,1,0.05), 'eps_val': numpy.arange(0.001,0.01,0.005),
+        'mask_var': numpy.arange(0.1,2,1)}]
+
+
+    sefes
+
+    clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, refit=True)
+    clf.fit(train_data.x,train_data,y)
+
+    fwef
+
+
+
+
+    dm=DiffusionMap(train_data,x0[1])
+
+
+
     if os.path.isfile('dmsys.pkl'):
         #print 'get pickle'
         pklfile=open('dmsys.pkl','r')
-        dmsys=pickle.load(pklfile)
+        dm,test_data_dm=pickle.load(pklfile)
     else:
         # the new coordinate system based on the training data
-        dmsys= DMSystem(train_data)
-
-        # for x01 in [0.0025]:
-        #     x0[1]=x01
-        dmsys.create_dm(x0)
-
-        #print 'make pickle'
+        dm=DiffusionMap(train_data,x0[1])
+        dm.make_map()
+        test_data_dm=Data(dm.transform(test_data.x),test_data.y,test_data.z,
+            xlabel=[str(i) for i in xrange(dm.neigen)])
         pklfile=open('dmsys.pkl','w')
-        pickle.dump(dmsys,pklfile)
+        pickle.dump([dm,test_data_dm],pklfile)
     pklfile.close()
 
-    filename='dmsys2.pkl'
-    if os.path.isfile(filename):
-        #print 'get pickle'
-        pklfile=open(filename,'r')
-        test_data_dm,test_data_dm_full=pickle.load(pklfile)
-    else:
-        # the new coordinate system based on the training data
-        test_data_dm = Data(dmsys.coordinates(test_data.x,x0),test_data.y,test_data.z,
-            xlabel=[str(i) for i in xrange(dmsys.nvar)])
-        test_data_dm_full  = Data(dmsys.dm[0]['dm'].transform_full(test_data.x),test_data.y,test_data.z)
-        #print 'make pickle'
-        pklfile=open(filename,'w')
-        pickle.dump([test_data_dm,test_data_dm_full],pklfile)
-    pklfile.close()
 
-    prunefrac=0.95
-    # train_dist = sklearn.metrics.pairwise_distances(dmsys.dmdata.x,dmsys.dmdata.x)
-    # numpy.fill_diagonal(train_dist,numpy.finfo('d').max)
+    ## plots that show dm x in color space
+    if doplot:
+        for i in xrange(6):
+            crap = numpy.sort(dm.data_dm().x[:,i])
+            crap= crap[len(crap)*.1:len(crap)*.9]
+            sig = crap.std()
+            cm=matplotlib.cm.ScalarMappable(
+                norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
+                    vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
+            cval=cm.to_rgba(dm.data_dm().x[:,i])
+            figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
+            figax[0].suptitle(str(i))
+            plt.savefig('splits.'+str(i)+'.png')
+
+        figax= dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
+        dm.data_dm().plot(lambda x: outliers,
+            color='b',alpha=0.5,s=20,ndim=6,figax=figax)
+        plt.savefig('temp.png')
+        figax= dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
+        dm.data_dm().plot(lambda x: outliers,
+            color='b',alpha=0.5,s=20,ndim=6,figax=figax)
+        plt.savefig('temp2.png')
+
+
+        # plt.clf()
+        # figax= test_data.plot(label='0.3',color='k',alpha=0.1,s=10)
+        # test_data.plot(lambda x: w, label='0.2',color='b',alpha=1,s=10,figax=figax)
+        # plt.show()
+
+    train_dist = sklearn.metrics.pairwise_distances(dm.data_dm().x,dm.data_dm().x)   
+    outlier_distances = train_dist[numpy.outer(outliers,outliers)]
+    outlier_distances = outlier_distances[outlier_distances !=0]
+    outlier_distances = numpy.sort(outlier_distances)
+    norm = outlier_distances[len(outlier_distances)*.05]
+
+    numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
+    train_min_dist = numpy.min(train_dist,axis=0)
+    closer  = train_min_dist < numpy.sort(train_min_dist)[train_data.ndata()*.95]
+    weight = numpy.exp(-(train_dist[outliers,:]/norm)**2).sum(axis=0)
+    if doplot:    
+        cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
+        cval=cm.to_rgba(weight)
+        figax= train_data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
+
+    weight_sort=numpy.sort(weight)
+
+    mn=[]
+    sd=[]
+    fracs=numpy.arange(0.01,0.5,0.05)
+    for frac in fracs:
+        w=weight < weight_sort[frac*train_data.ndata()]
+        w=numpy.logical_and(w,closer)
+        mn.append(train_data.y[w].mean())
+        sd.append(train_data.y[w].std())
+    plt.scatter(fracs,mn,c='b',label='mean')
+    plt.scatter(fracs,sd,c='r',label='std')
+    plt.show()
+
+    wfe
+    # get the subset of bad ones
+
     # train_min_dist=numpy.min(train_dist,axis=0)
     # train_sort = numpy.argsort(train_min_dist)
     # train_sort = train_sort[0:prunefrac * len(train_sort)]
@@ -854,17 +825,10 @@ if __name__ == '__main__':
     # test_sort =  numpy.sort(test_min_dist)
     # w = test_min_dist < test_sort[len(test_sort)*prunefrac]
 #     plt.clf()
-    # figax= train_data.plot(color='r',alpha=0.1,s=10)
-    # train_data.plot(lambda x: numpy.abs(train_data.y) >0.1, color='b',alpha=0.5,s=20,figax=figax)
-    # plt.show()
+
 
 #    plt.savefig('temp1.png')
-    # figax= dmsys.dmdata.plot(color='r',alpha=0.1,s=10)
-    # dmsys.dmdata.plot(lambda x: numpy.abs(test_data_dm.y) > 0.05, color='b',alpha=0.5,s=20,figax=figax)
-    # plt.savefig('temp.png')
-    # figax= dmsys.dmdata.plot(color='r',alpha=0.1,s=10,nsig=20)
-    # dmsys.dmdata.plot(lambda x: numpy.abs(test_data_dm.y) > 0.05, color='b',alpha=0.5,s=20,figax=figax)
-    # plt.savefig('temp2.png')
+
 
     # wef
 # #    plt.savefig('temp2.png')
@@ -876,31 +840,6 @@ if __name__ == '__main__':
 
 
 #     wefe
-    import matplotlib.cm
-    import matplotlib.colors
-    ## plots that show dm x in color space
-    if doplot:
-        for i in xrange(6):
-            crap = numpy.sort(dmsys.dmdata.x[:,i])
-            crap= crap[len(crap)*.1:len(crap)*.9]
-            sig = crap.std()
-            cm=matplotlib.cm.ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
-                    vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
-            cval=cm.to_rgba(dmsys.dmdata.x[:,i])
-            figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
-            figax[0].suptitle(str(i))
-            plt.savefig('splits.'+str(i)+'.png')
-        wef
-        print test_data.y.mean(), test_data.y.std()
-        w=ok(test_data_dm.x)
-        print test_data.y[w].mean(), test_data.y[w].std()
-        print len(test_data.y),w.sum()
-        plt.clf()
-        figax= test_data.plot(label='0.3',color='k',alpha=0.1,s=10)
-        test_data.plot(lambda x: w, label='0.2',color='b',alpha=1,s=10,figax=figax)
-        plt.show()
-        wefe
 
     #get distances
     

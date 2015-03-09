@@ -24,6 +24,8 @@ import sklearn
 from sklearn.cross_validation import cross_val_score
 import sklearn.ensemble
 import sklearn.metrics.pairwise
+import sklearn.grid_search
+import sklearn.base
 import diffuse
 import copy
 matplotlib.rc('figure', figsize=(11,11))
@@ -274,7 +276,6 @@ class DiffusionMap:
 
         kwargs=dict()
         kwargs['eps_val'] = self.par.item()
-        print kwargs['eps_val']
         kwargs['t']=1
         kwargs['delta']=1e-8
         kwargs['var']=0.95
@@ -600,34 +601,48 @@ def meanuncertainties(test_data,output):
 
     # return frac_include,mns.mean(axis=1),mns.std(axis=1),dum.mean(axis=1),dum.std(axis=1)
 
-class MyEstimator(object):
+class MyEstimator(sklearn.base.BaseEstimator):
     """docstring for MyEstimator"""
-    def __init__(self, catastrophy_cut=numpy.float_(0.05), eps_val=numpy.float_(0.0025),mask_var=numpy.float_(1)):
+    def __init__(self, catastrophy_cut=numpy.float_(0.05), eps_val=numpy.float_(0.0025),
+        mask_var=numpy.float_(1),xlabel=None,ylabel=None):
         super(MyEstimator, self).__init__()
-        self.catastrophy_cut=catastrophy_cut
-        self.eps_val=eps_val
-        self.mask_var=mask_var
+        self.params=dict()
+        self.params['catastrophy_cut']=catastrophy_cut
+        self.params['eps_val']=eps_val
+        self.params['mask_var']=mask_var
+
 
         self.outlier_cut=0.95
         self.optimize_frac = 0.1
+        self.xlabel=xlabel
+        self.ylabel=ylabel
+
+    def get_params(self,deep=True):
+        return self.params
+
+    def set_params(self, catastrophy_cut=None, eps_val=None,
+        mask_var=None):
+        # for key in self.dict:
+        #     self.dict[key]=params[key]
+        self.params['catastrophy_cut']=catastrophy_cut
+        self.params['eps_val']=eps_val
+        self.params['mask_var']=mask_var
+        return self
 
     def fit(self, x, y):
 
-        self.catastrophy = numpy.abs(x.y) > self.catastrophy_cut
+        self.catastrophy = numpy.abs(y) > self.params['catastrophy_cut']
 
-        if doplot:
-            plt.clf()
-            figax= train_data.plot(color='b',alpha=0.1,s=10)
-            train_data.plot(lambda x: self.catastrophy, color='r',alpha=1,s=20,figax=figax)
-            plt.savefig('outliers.png')
 
-        if os.path.isfile('estimator.pkl'):
+
+        if False: #os.path.isfile('estimator.pkl'):
             #print 'get pickle'
             pklfile=open('estimator.pkl','r')
             self.dm=pickle.load(pklfile)
         else:
             # the new coordinate system based on the training data
-            self.dm=DiffusionMap(x,self.eps_val)
+            data = Data(x,y,numpy.zeros(len(y)),xlabel=self.xlabel,ylabel=self.ylabel)
+            self.dm=DiffusionMap(data,self.params['eps_val'])
             self.dm.make_map()  
             pklfile=open('estimator.pkl','w')
             pickle.dump(self.dm,pklfile)
@@ -635,28 +650,7 @@ class MyEstimator(object):
         # self.dm=DiffusionMap(x,self.eps_val)
         # self.dm.make_map()
 
-        if doplot:
-            plt.clf()
-            for i in xrange(6):
-                crap = numpy.sort(self.dm.data_dm().x[:,i])
-                crap= crap[len(crap)*.1:len(crap)*.9]
-                sig = crap.std()
-                cm=matplotlib.cm.ScalarMappable(
-                    norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
-                        vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
-                cval=cm.to_rgba(self.dm.data_dm().x[:,i])
-                figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
-                figax[0].suptitle(str(i))
-                plt.savefig('splits.'+str(i)+'.png')
 
-            figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
-            self.dm.data_dm().plot(lambda x: self.catastrophy,
-                color='b',alpha=0.5,s=20,ndim=6,figax=figax)
-            plt.savefig('temp.png')
-            figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
-            self.dm.data_dm().plot(lambda x: self.catastrophy,
-                color='b',alpha=0.5,s=20,ndim=6,figax=figax)
-            plt.savefig('temp2.png')
 
         train_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,self.dm.data_dm().x)
         catastrophy_distances = train_dist[numpy.outer(self.catastrophy,self.catastrophy)]
@@ -665,35 +659,62 @@ class MyEstimator(object):
         numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
         train_min_dist = numpy.min(train_dist,axis=0)
         train_min_dist = numpy.sort(train_min_dist)
-        self.max_distance = train_min_dist[x.x.shape[0]*self.outlier_cut]
+        self.max_distance = train_min_dist[x.shape[0]*self.outlier_cut]
 
-        self.mask_scale = self.mask_var*catastrophy_distances[x.x.shape[0]*0.05]
+        self.mask_scale = catastrophy_distances[x.shape[0]*self.params['mask_var']]
 
 
     def predict(self, x):
         return 0
     
-    def scorer(self,x,y):
-        x_dm = self.dm.transform(x.x)
+    def score(self,x,y):
+        x_dm = self.dm.transform(x)
 
         test_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,x_dm)   
         test_min_dist = numpy.min(test_dist,axis=0)
 
         closer  = test_min_dist < self.max_distance
 
-        weight = numpy.exp(-(test_dist[self.catastrophy,:]/self.mask_scale)**2).sum(axis=0)
-        if doplot:  
-            plt.clf() 
-            cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
-            cval=cm.to_rgba(weight)
-            figax= x.plot(c=cval,alpha=0.1,s=20,cmap=cm)
-            plt.savefig('color_dm.png')
+        self.weight = numpy.exp(-(test_dist[self.catastrophy,:]/self.mask_scale)**2).sum(axis=0)
 
-        weight_sort=numpy.sort(weight)
-        w=weight < weight_sort[self.optimize_frac*x.ndata()]
-        w=numpy.logical_and(w,closer)
+        weight_sort=numpy.sort(self.weight[closer])
+        w=self.weight[closer] <= weight_sort[self.optimize_frac*len(weight_sort)]
+#        w=numpy.logical_and(w,closer)
 
-        return 1./y[w].std()
+        ans= 1./y[closer[w]].std()
+        return ans
+
+    def plots(self,x):
+
+        figax= train_data.plot(color='b',alpha=0.1,s=10)
+        train_data.plot(lambda x: self.catastrophy, color='r',alpha=1,s=20,figax=figax)
+        plt.savefig('outliers.png')
+
+        for i in xrange(6):
+            crap = numpy.sort(self.dm.data_dm().x[:,i])
+            crap= crap[len(crap)*.1:len(crap)*.9]
+            sig = crap.std()
+            cm=matplotlib.cm.ScalarMappable(
+                norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
+                    vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
+            cval=cm.to_rgba(self.dm.data_dm().x[:,i])
+            figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
+            figax[0].suptitle(str(i))
+            plt.savefig('splits.'+str(i)+'.png')
+
+        figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
+        self.dm.data_dm().plot(lambda x: self.catastrophy,
+            color='b',alpha=0.1,s=20,ndim=6,figax=figax)
+        plt.savefig('temp.png')
+        figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
+        self.dm.data_dm().plot(lambda x: self.catastrophy,
+            color='b',alpha=0.2,s=20,ndim=6,figax=figax)
+        plt.savefig('temp2.png')
+
+        cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
+        cval=cm.to_rgba(self.weight)
+        figax= x.plot(c=cval,alpha=0.2,s=20,cmap=cm,vmin=0,vmax=cval.max())
+        plt.savefig('color_dm.png')
 
 if __name__ == '__main__':
 
@@ -707,7 +728,7 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([0.05,0.0025*2.5])
+    x0 = numpy.array([0.05,0.0025*2.5,0.05])
 
     optimization_frac = 0.1
     outlier_cut = 0.95
@@ -716,130 +737,31 @@ if __name__ == '__main__':
     train_data, test_data = manage_data(pdict['test_size'],rs)
 
 
-    estimator = MyEstimator()
-    estimator.fit(train_data, train_data)
-    print estimator.scorer(test_data, test_data.y)
-
+    estimator = MyEstimator(catastrophy_cut=x0[0],
+        eps_val=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
+    # estimator.fit(train_data, train_data)
+    # estimator.score(test_data, test_data.y)
+    # estimator.plots(test_data)
     # optimize
 
-    param_grid = [{'outlier_cut': numpy.arange(0.02,1,0.05), 'eps_val': numpy.arange(0.001,0.01,0.005),
-        'mask_var': numpy.arange(0.1,2,1)}]
+    param_grid = [{'catastrophy_cut': numpy.arange(0.03,.08,0.01), 'eps_val': numpy.arange(0.001,0.01,0.001),
+        'mask_var': numpy.arange(0.01,0.15,.01)}]
 
-
-    sefes
-
-    clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, refit=True)
-    clf.fit(train_data.x,train_data,y)
-
-    fwef
-
-
-
-
-    dm=DiffusionMap(train_data,x0[1])
-
-
-
-    if os.path.isfile('dmsys.pkl'):
+    filename = 'clf.pkl'
+    if False:#os.path.isfile(filename):
         #print 'get pickle'
-        pklfile=open('dmsys.pkl','r')
-        dm,test_data_dm=pickle.load(pklfile)
+        pklfile=open(filename,'r')
+        clf=pickle.load(pklfile)
     else:
         # the new coordinate system based on the training data
-        dm=DiffusionMap(train_data,x0[1])
-        dm.make_map()
-        test_data_dm=Data(dm.transform(test_data.x),test_data.y,test_data.z,
-            xlabel=[str(i) for i in xrange(dm.neigen)])
-        pklfile=open('dmsys.pkl','w')
-        pickle.dump([dm,test_data_dm],pklfile)
+        clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=12, cv=10,refit=True)
+        clf.fit(train_data.x,train_data.y)
+        pklfile=open(filename,'w')
+        pickle.dump(clf,pklfile)
     pklfile.close()
-
-
-    ## plots that show dm x in color space
-    if doplot:
-        for i in xrange(6):
-            crap = numpy.sort(dm.data_dm().x[:,i])
-            crap= crap[len(crap)*.1:len(crap)*.9]
-            sig = crap.std()
-            cm=matplotlib.cm.ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
-                    vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
-            cval=cm.to_rgba(dm.data_dm().x[:,i])
-            figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
-            figax[0].suptitle(str(i))
-            plt.savefig('splits.'+str(i)+'.png')
-
-        figax= dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
-        dm.data_dm().plot(lambda x: outliers,
-            color='b',alpha=0.5,s=20,ndim=6,figax=figax)
-        plt.savefig('temp.png')
-        figax= dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
-        dm.data_dm().plot(lambda x: outliers,
-            color='b',alpha=0.5,s=20,ndim=6,figax=figax)
-        plt.savefig('temp2.png')
-
-
-        # plt.clf()
-        # figax= test_data.plot(label='0.3',color='k',alpha=0.1,s=10)
-        # test_data.plot(lambda x: w, label='0.2',color='b',alpha=1,s=10,figax=figax)
-        # plt.show()
-
-    train_dist = sklearn.metrics.pairwise_distances(dm.data_dm().x,dm.data_dm().x)   
-    outlier_distances = train_dist[numpy.outer(outliers,outliers)]
-    outlier_distances = outlier_distances[outlier_distances !=0]
-    outlier_distances = numpy.sort(outlier_distances)
-    norm = outlier_distances[len(outlier_distances)*.05]
-
-    numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
-    train_min_dist = numpy.min(train_dist,axis=0)
-    closer  = train_min_dist < numpy.sort(train_min_dist)[train_data.ndata()*.95]
-    weight = numpy.exp(-(train_dist[outliers,:]/norm)**2).sum(axis=0)
-    if doplot:    
-        cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
-        cval=cm.to_rgba(weight)
-        figax= train_data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
-
-    weight_sort=numpy.sort(weight)
-
-    mn=[]
-    sd=[]
-    fracs=numpy.arange(0.01,0.5,0.05)
-    for frac in fracs:
-        w=weight < weight_sort[frac*train_data.ndata()]
-        w=numpy.logical_and(w,closer)
-        mn.append(train_data.y[w].mean())
-        sd.append(train_data.y[w].std())
-    plt.scatter(fracs,mn,c='b',label='mean')
-    plt.scatter(fracs,sd,c='r',label='std')
-    plt.show()
-
-    wfe
-    # get the subset of bad ones
-
-    # train_min_dist=numpy.min(train_dist,axis=0)
-    # train_sort = numpy.argsort(train_min_dist)
-    # train_sort = train_sort[0:prunefrac * len(train_sort)]
-    # train_cut =  train_sort[-1]
-    # test_dist = sklearn.metrics.pairwise_distances(dmsys.dmdata.x,test_data_dm.x)
-    # test_min_dist = numpy.min(test_dist,axis=0)
-    # test_sort =  numpy.sort(test_min_dist)
-    # w = test_min_dist < test_sort[len(test_sort)*prunefrac]
-#     plt.clf()
-
-
-#    plt.savefig('temp1.png')
-
-
-    # wef
-# #    plt.savefig('temp2.png')
-    # figax= test_data_dm.plot(color='r',alpha=0.1,s=10)
-    # test_data_dm.plot(lambda x: numpy.abs(test_data_dm.y) >x0[0], color='b',alpha=0.5,s=20,figax=figax)
-    # plt.show()
-    #    plt.savefig('temp3.png')
-
-
-
-#     wefe
+    print clf.get_params()
+    print clf.score(test_data.x,test_data.y)
+    fwef
 
     #get distances
     
@@ -1228,3 +1150,114 @@ if __name__ == '__main__':
     # ax2.legend()
 
     # plt.show()
+
+def old():
+
+
+
+
+    dm=DiffusionMap(train_data,x0[1])
+
+
+
+    if os.path.isfile('dmsys.pkl'):
+        #print 'get pickle'
+        pklfile=open('dmsys.pkl','r')
+        dm,test_data_dm=pickle.load(pklfile)
+    else:
+        # the new coordinate system based on the training data
+        dm=DiffusionMap(train_data,x0[1])
+        dm.make_map()
+        test_data_dm=Data(dm.transform(test_data.x),test_data.y,test_data.z,
+            xlabel=[str(i) for i in xrange(dm.neigen)])
+        pklfile=open('dmsys.pkl','w')
+        pickle.dump([dm,test_data_dm],pklfile)
+    pklfile.close()
+
+
+    ## plots that show dm x in color space
+    if doplot:
+        for i in xrange(6):
+            crap = numpy.sort(dm.data_dm().x[:,i])
+            crap= crap[len(crap)*.1:len(crap)*.9]
+            sig = crap.std()
+            cm=matplotlib.cm.ScalarMappable(
+                norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
+                    vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
+            cval=cm.to_rgba(dm.data_dm().x[:,i])
+            figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
+            figax[0].suptitle(str(i))
+            plt.savefig('splits.'+str(i)+'.png')
+
+        figax= dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
+        dm.data_dm().plot(lambda x: outliers,
+            color='b',alpha=0.5,s=20,ndim=6,figax=figax)
+        plt.savefig('temp.png')
+        figax= dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
+        dm.data_dm().plot(lambda x: outliers,
+            color='b',alpha=0.5,s=20,ndim=6,figax=figax)
+        plt.savefig('temp2.png')
+
+
+        # plt.clf()
+        # figax= test_data.plot(label='0.3',color='k',alpha=0.1,s=10)
+        # test_data.plot(lambda x: w, label='0.2',color='b',alpha=1,s=10,figax=figax)
+        # plt.show()
+
+    train_dist = sklearn.metrics.pairwise_distances(dm.data_dm().x,dm.data_dm().x)   
+    outlier_distances = train_dist[numpy.outer(outliers,outliers)]
+    outlier_distances = outlier_distances[outlier_distances !=0]
+    outlier_distances = numpy.sort(outlier_distances)
+    norm = outlier_distances[len(outlier_distances)*.05]
+
+    numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
+    train_min_dist = numpy.min(train_dist,axis=0)
+    closer  = train_min_dist < numpy.sort(train_min_dist)[train_data.ndata()*.95]
+    weight = numpy.exp(-(train_dist[outliers,:]/norm)**2).sum(axis=0)
+    if doplot:    
+        cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
+        cval=cm.to_rgba(weight)
+        figax= train_data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
+
+    weight_sort=numpy.sort(weight)
+
+    mn=[]
+    sd=[]
+    fracs=numpy.arange(0.01,0.5,0.05)
+    for frac in fracs:
+        w=weight < weight_sort[frac*train_data.ndata()]
+        w=numpy.logical_and(w,closer)
+        mn.append(train_data.y[w].mean())
+        sd.append(train_data.y[w].std())
+    plt.scatter(fracs,mn,c='b',label='mean')
+    plt.scatter(fracs,sd,c='r',label='std')
+    plt.show()
+
+    wfe
+    # get the subset of bad ones
+
+    # train_min_dist=numpy.min(train_dist,axis=0)
+    # train_sort = numpy.argsort(train_min_dist)
+    # train_sort = train_sort[0:prunefrac * len(train_sort)]
+    # train_cut =  train_sort[-1]
+    # test_dist = sklearn.metrics.pairwise_distances(dmsys.dmdata.x,test_data_dm.x)
+    # test_min_dist = numpy.min(test_dist,axis=0)
+    # test_sort =  numpy.sort(test_min_dist)
+    # w = test_min_dist < test_sort[len(test_sort)*prunefrac]
+#     plt.clf()
+
+
+#    plt.savefig('temp1.png')
+
+
+    # wef
+# #    plt.savefig('temp2.png')
+    # figax= test_data_dm.plot(color='r',alpha=0.1,s=10)
+    # test_data_dm.plot(lambda x: numpy.abs(test_data_dm.y) >x0[0], color='b',alpha=0.5,s=20,figax=figax)
+    # plt.show()
+    #    plt.savefig('temp3.png')
+
+
+
+#     wefe
+

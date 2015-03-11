@@ -30,7 +30,7 @@ from sklearn.metrics import  make_scorer
 import diffuse
 import copy
 from matplotlib.legend_handler import HandlerNpoints
-from guppy import hpy
+#from guppy import hpy
 
 matplotlib.rc('figure', figsize=(11,11))
 
@@ -322,16 +322,26 @@ class DiffusionMap(object):
 
 class MyEstimator(sklearn.base.BaseEstimator):
     """docstring for MyEstimator"""
+
+    __slots__=['catastrophe_cut','eps_val','mask_var','catastrophe', 'dm', 'max_distance','mask_scale','outlier_cut','optimize_frac',
+    'xlabel','ylabel']
+
+
     def __init__(self, catastrophe_cut=numpy.float_(0.05), eps_val=numpy.float_(0.0025),
         mask_var=numpy.float_(1),xlabel=None,ylabel=None):
         super(MyEstimator, self).__init__()
         # h=hp.heap()
         # print h
 #        hp.setrelheap()
-        self.params=dict()
-        self.params['catastrophe_cut']=catastrophe_cut
-        self.params['eps_val']=eps_val
-        self.params['mask_var']=mask_var
+        # self.params=dict()
+        # self.params['catastrophe_cut']=catastrophe_cut
+        # self.params['eps_val']=eps_val
+        # self.params['mask_var']=mask_var
+
+        #these are the parameters
+        self.catastrophe_cut=catastrophe_cut
+        self.eps_val=eps_val
+        self.mask_var=mask_var
 
         self.catastrophe=None
         self.dm=None
@@ -344,14 +354,18 @@ class MyEstimator(sklearn.base.BaseEstimator):
         self.ylabel=ylabel
 
     def get_params(self,deep=True):
-        return self.params
+        params=dict()
+        params['catastrophe_cut']=self.catastrophe_cut
+        params['eps_val']=self.eps_val
+        params['mask_var']=self.mask_var
+        return params
 
     def set_params(self, catastrophe_cut=None, eps_val=None,
         mask_var=None):
-        self.params.clear()
-        self.params['catastrophe_cut']=catastrophe_cut
-        self.params['eps_val']=eps_val
-        self.params['mask_var']=mask_var
+        self.catastrophe_cut=catastrophe_cut
+        self.eps_val=eps_val
+        self.mask_var=mask_var
+
         return self
 
     def fit(self, x, y):
@@ -360,7 +374,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
         del(self.mask_scale)
         del(self.dm)
 
-        self.catastrophe = numpy.abs(y) > self.params['catastrophe_cut']
+        self.catastrophe = numpy.abs(y) > self.catastrophe_cut
 
 
 
@@ -371,7 +385,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
         else:
             # the new coordinate system based on the training data
             data = Data(x,y,numpy.zeros(len(y)),xlabel=self.xlabel,ylabel=self.ylabel)
-            self.dm=DiffusionMap(data,self.params['eps_val'])
+            self.dm=DiffusionMap(data,self.eps_val)
             self.dm.make_map()
 
         #     pklfile=open('estimator.pkl','w')
@@ -390,7 +404,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
         train_min_dist = numpy.sort(train_min_dist)
 
         self.max_distance = train_min_dist[x.shape[0]*self.outlier_cut]
-        self.mask_scale = catastrophe_distances[x.shape[0]*self.params['mask_var']]
+        self.mask_scale = catastrophe_distances[x.shape[0]*self.mask_var]
 
 
     def predict(self, x):
@@ -420,7 +434,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
 #        w=numpy.logical_and(w,closer)
 
         ans= -(y[closer[w]].std()**2)
-        print self.params,ans
+        print self.catastrophe_cut,self.eps_val,self.mask_var,numpy.sqrt(-ans)
         return ans
 
     def plots(self,x):
@@ -459,7 +473,9 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
 if __name__ == '__main__':
 
-    doplot = True
+    doplot = False
+    cv=10
+    n_jobs=24
 
     parser = ArgumentParser()
     parser.add_argument('test_size', nargs='?',default=0.1)
@@ -495,7 +511,7 @@ if __name__ == '__main__':
         # the new coordinate system based on the training data
         del(test_data)
 #        hp.setrelheap()
-        clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=24, cv=3,refit=True)
+        clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=n_jobs, cv=cv,refit=True)
         clf.fit(train_data.x,train_data.y)
         joblib.dump(clf, filename) 
 #        pklfile=open(filename,'w')

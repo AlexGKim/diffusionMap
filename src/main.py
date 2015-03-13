@@ -30,6 +30,7 @@ from sklearn.metrics import  make_scorer
 import diffuse
 import copy
 from matplotlib.legend_handler import HandlerNpoints
+from scipy.stats import norm
 #from guppy import hpy
 
 matplotlib.rc('figure', figsize=(11,11))
@@ -278,6 +279,8 @@ class DiffusionMap(object):
         kwargs['t']=1
         kwargs['delta']=1e-8
         kwargs['var']=0.95
+
+        #### NOTE Take advantage of the fact that self.data.x*self.weight is a temp object
         self.dmap = diffuse.diffuse(self.data.x*self.weight,**kwargs)
         self.neigen = self.dmap['neigen']
 #        print 'Memory usage: %s (kb)' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -296,6 +299,7 @@ class DiffusionMap(object):
         '~numpy.ndarray'
           DM coordinates for a set of points
         """
+        #### NOTE Take advantage of the fact that self.data.x*self.weight is a temp object
 
         return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)
 
@@ -319,28 +323,32 @@ class DiffusionMap(object):
     def data_dm(self):
         return Data(self.dmap['X'],self.data.y,self.data.z,xlabel=[str(i) for i in xrange(self.neigen)])
 
+    def data_mindist(self):
+        dist = sklearn.metrics.pairwise_distances(self.data.x*self.weight,self.data.x*self.weight)
+        numpy.fill_diagonal(dist,dist.max()) #numpy.finfo('d').max)
+        return numpy.min(dist,axis=0)
 
 class MyEstimator(sklearn.base.BaseEstimator):
     """docstring for MyEstimator"""
 
-    __slots__=['catastrophe_cut','eps_val','mask_var','catastrophe', 'dm', 'max_distance','mask_scale','outlier_cut','optimize_frac',
+    __slots__=['catastrophe_cut','eps_par','mask_var','catastrophe', 'dm', 'max_distance','mask_scale','outlier_cut','optimize_frac',
     'xlabel','ylabel']
 
+    #this is for dubugging memory
+    # ncalls = 0
 
-    def __init__(self, catastrophe_cut=numpy.float_(0.05), eps_val=numpy.float_(0.0025),
+    def __init__(self, catastrophe_cut=numpy.float_(0.05), eps_par=numpy.float_(0.),
         mask_var=numpy.float_(1),xlabel=None,ylabel=None):
         super(MyEstimator, self).__init__()
-        # h=hp.heap()
-        # print h
-#        hp.setrelheap()
+
         # self.params=dict()
         # self.params['catastrophe_cut']=catastrophe_cut
-        # self.params['eps_val']=eps_val
+        # self.params['eps_par']=eps_par
         # self.params['mask_var']=mask_var
 
         #these are the parameters
         self.catastrophe_cut=catastrophe_cut
-        self.eps_val=eps_val
+        self.eps_par=eps_par
         self.mask_var=mask_var
 
         self.catastrophe=None
@@ -353,17 +361,24 @@ class MyEstimator(sklearn.base.BaseEstimator):
         self.xlabel=xlabel
         self.ylabel=ylabel
 
+        # MyEstimator.ncalls = MyEstimator.ncalls+1
+        # if MyEstimator.ncalls ==4:
+        #     print hp.heap()
+        #     hp.setref()
+        # elif MyEstimator.ncalls > 4:
+        #     print hp.heap()
+
     def get_params(self,deep=True):
         params=dict()
         params['catastrophe_cut']=self.catastrophe_cut
-        params['eps_val']=self.eps_val
+        params['eps_par']=self.eps_par
         params['mask_var']=self.mask_var
         return params
 
-    def set_params(self, catastrophe_cut=None, eps_val=None,
+    def set_params(self, catastrophe_cut=None, eps_par=None,
         mask_var=None):
         self.catastrophe_cut=catastrophe_cut
-        self.eps_val=eps_val
+        self.eps_par=eps_par
         self.mask_var=mask_var
 
         return self
@@ -385,26 +400,36 @@ class MyEstimator(sklearn.base.BaseEstimator):
         else:
             # the new coordinate system based on the training data
             data = Data(x,y,numpy.zeros(len(y)),xlabel=self.xlabel,ylabel=self.ylabel)
-            self.dm=DiffusionMap(data,self.eps_val)
+            self.dm=DiffusionMap(data,self.eps_par)
+            mindist = self.dm.data_mindist()
+            mindist= numpy.log(mindist)
+            mu, std = norm.fit(mindist)
+            wok=numpy.abs(mindist-mu)/std < 3
+            mu, std = norm.fit(mindist[wok])
+            self.dm.par = numpy.exp(mu+self.eps_par*std)
             self.dm.make_map()
 
         #     pklfile=open('estimator.pkl','w')
         #     pickle.dump(self.dm,pklfile)
         # pklfile.close()
-        # self.dm=DiffusionMap(x,self.eps_val)
+        # self.dm=DiffusionMap(x,self.eps_par)
         # self.dm.make_map()
 
 
         train_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,self.dm.data_dm().x)
-        catastrophe_distances = train_dist[numpy.outer(self.catastrophe,self.catastrophe)]
-        catastrophe_distances = catastrophe_distances[catastrophe_distances !=0]
-        catastrophe_distances = numpy.sort(catastrophe_distances)
+        # catastrophe_distances = train_dist[numpy.outer(self.catastrophe,self.catastrophe)]
+        # catastrophe_distances = catastrophe_distances[catastrophe_distances !=0]
+        # catastrophe_distances = numpy.sort(catastrophe_distances)
         numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
         train_min_dist = numpy.min(train_dist,axis=0)
         train_min_dist = numpy.sort(train_min_dist)
-
+        catastrophe_min_dist = train_min_dist[self.catastrophe] 
+        catastrophe_min_dist=numpy.log(catastrophe_min_dist)
+        mu, std = norm.fit(catastrophe_min_dist)
+        wok=numpy.abs(catastrophe_min_dist-mu)/std < 3
+        mu, std = norm.fit(catastrophe_min_dist[wok])
         self.max_distance = train_min_dist[x.shape[0]*self.outlier_cut]
-        self.mask_scale = catastrophe_distances[x.shape[0]*self.mask_var]
+        self.mask_scale = numpy.exp(mu+std*self.mask_var)
 
 
     def predict(self, x):
@@ -434,7 +459,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
 #        w=numpy.logical_and(w,closer)
 
         ans= -(y[closer[w]].std()**2)
-        print self.catastrophe_cut,self.eps_val,self.mask_var,numpy.sqrt(-ans)
+        print self.catastrophe_cut,self.eps_par,self.mask_var,numpy.sqrt(-ans)
         return ans
 
     def plots(self,x):
@@ -474,31 +499,36 @@ class MyEstimator(sklearn.base.BaseEstimator):
 if __name__ == '__main__':
 
     doplot = False
-    cv=10
-    n_jobs=24
 
     parser = ArgumentParser()
-    parser.add_argument('test_size', nargs='?',default=0.1)
+    parser.add_argument('cv', nargs='?',default=3,type=int)
+    parser.add_argument('n_jobs', nargs='?',default=1,type=int)
+    parser.add_argument('test_size', nargs='?',default=0.1,type=float)
     parser.add_argument('seed', nargs='?',default=9)
-    
+    parser.add_argument('--test',default=False,type=bool)
     ins = parser.parse_args()
     pdict=vars(ins)
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([0.05,0.0025*2.5,0.05])
+    x0 = numpy.array([0.05,0.,0.05])
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
     estimator = MyEstimator(catastrophe_cut=x0[0],
-        eps_val=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
+        eps_par=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
 #    estimator.fit(train_data.x, train_data.y)
     # estimator.score(test_data, test_data.y)
     # estimator.plots(test_data)
     # optimize
+    if pdict['test']:
+      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.1), 'eps_par': numpy.arange(-2,2,10),
+       'mask_var': numpy.arange(-2,2.1,10)}]
+    else:
+      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.02), 'eps_par': numpy.arange(-2,2.01,1),
+      'mask_var': numpy.arange(-2,2.01,1)}]
 
-    param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.01), 'eps_val': numpy.arange(0.001,0.01,0.001),
-        'mask_var': numpy.arange(0.01,0.1,.01)}]
+    print pdict
 
     from sklearn.externals import joblib
     filename = 'clf.pkl'
@@ -510,8 +540,8 @@ if __name__ == '__main__':
     else:
         # the new coordinate system based on the training data
         del(test_data)
-#        hp.setrelheap()
-        clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=n_jobs, cv=cv,refit=True)
+        clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=pdict['n_jobs'],
+            cv=pdict['cv'],pre_dispatch='n_jobs',refit=True)
         clf.fit(train_data.x,train_data.y)
         joblib.dump(clf, filename) 
 #        pklfile=open(filename,'w')

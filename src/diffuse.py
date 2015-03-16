@@ -89,9 +89,16 @@ def nystrom(dmap, orig, d, sigma='default'):
         kwargs['sigma'] = sigma
     #dM=importr('diffusionMap')
     
+    #### NOTE Take advantage of the fact that orig and d are temp object
+
+
     # Concatenate new data to training data
 
     data_concat = np.concatenate((orig, d))
+    lenorig = len(orig)
+    del(orig)
+    del(d)
+
     n_samp, n_feat = data_concat.shape
     data_concat = data_concat.reshape(n_samp, 1, n_feat)
 #    data_concat_T = data_concat.reshape(1, n_samp, n_feat)
@@ -103,7 +110,9 @@ def nystrom(dmap, orig, d, sigma='default'):
     
     # Slice off the part of the distance matrix that 
     # represents distances from new data to original data
-    distmat_slice = distmat[len(orig):, :len(orig)]
+    # distmat_slice = distmat[len(orig):, :len(orig)]
+    distmat_slice = distmat[lenorig :, :lenorig ]
+
     # Compute nystrom and return
 
     # R version
@@ -124,7 +133,11 @@ def nystrom_py(dmap, Dnew, **kwargs):
     sigma=dmap['epsilon']
     if Nold != X.shape[0]:
       print "dimensions don't match"
-    Xnew = numpy.exp(-Dnew**2/sigma)
+
+    #decrease memory footprint taking advantage that Dnew is temp
+    # Xnew = numpy.exp(-Dnew**2/sigma)
+    Dnew = numpy.exp(-Dnew**2/sigma)
+    Xnew = Dnew
     v = numpy.sum(Xnew,axis=1)
 
     #some points are far away from the training set
@@ -152,19 +165,33 @@ def epsilonCompute(D, p=0.01):
    return epsilon
 
 def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.68):
+    #### NOTE Take advantage of the fact that D is a temp object
 
   if eps_val == 'default':
     eps_val = epsilonCompute(D)
 
   n=D.shape[0]
-  K=numpy.exp(-D**2/eps_val)
-  v = numpy.sqrt(numpy.sum(K,axis=0))
+
+  # Rewrite code for memory not speed
+
+  # K=numpy.exp(-D**2/eps_val)
+  # v = numpy.sqrt(numpy.sum(K,axis=0))
   
-  A= K / numpy.outer(v,v)
-  del K
+  # A= K / numpy.outer(v,v)
+  # del K
+
+  D=numpy.exp(-D**2/eps_val)
+  v = numpy.sqrt(numpy.sum(D,axis=0))
+  D=D / numpy.outer(v,v)
+  # for i in xrange(K.shape[0]):
+  #   K[i,:]=K[i,:]/v
+  # for j in xrange(K.shape[1]):
+  #   K[:,j]=K[:,j]/v
+  A=D
+
   w=numpy.where(A > delta)
   Asp =  csc_matrix( (A[w],(w[0],w[1])), shape=A.shape )
-  del A
+  del A, D
   if neigen is None:
     neff = numpy.minimum(maxdim,n)
   else:

@@ -492,7 +492,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
         plt.savefig('temp2.png')
 
         cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
-        cval=cm.to_rgba(self.weight(x))
+        cval=cm.to_rgba(self.weight(x.x))
         figax= x.plot(c=cval,alpha=0.2,s=20,cmap=cm,vmin=0,vmax=cval.max())
         plt.savefig('color_dm.png')
 
@@ -521,7 +521,7 @@ if __name__ == '__main__':
         eps_par=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
 #    estimator.fit(train_data.x, train_data.y)
     # estimator.score(test_data, test_data.y)
-    # estimator.plots(test_data)
+    # estimator.plots(test_data.x)
     # optimize
     if pdict['test']:
       param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.05), 'eps_par': numpy.arange(-2,2,10),
@@ -545,8 +545,12 @@ if __name__ == '__main__':
 
         me = MPI.COMM_WORLD.Get_rank()
 
-        param_grid[0]['catastrophe_cut']=numpy.array([param_grid[0]['catastrophe_cut'][me]])
-        print me, param_grid
+        me1=me/len(param_grid[0]['eps_par'])
+        me2 = me % len(param_grid[0]['eps_par'])
+        param_grid[0]['catastrophe_cut']=numpy.array([param_grid[0]['catastrophe_cut'][me1]])
+        param_grid[0]['eps_par']=numpy.array([param_grid[0]['eps_par'][me2]])
+
+        print me, me1, me2, param_grid
 
         clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=pdict['n_jobs'],
             cv=pdict['cv'],pre_dispatch='n_jobs',refit=True)
@@ -562,9 +566,7 @@ if __name__ == '__main__':
                     best_score_= cl.best_score_
                     bestcl=cl
             joblib.dump(bestcl, filename) 
-#        pklfile=open(filename,'w')
-#        pickle.dump(clf,pklfile)
-#        pklfile.close()
+
         import sys
         sys.exit()
 

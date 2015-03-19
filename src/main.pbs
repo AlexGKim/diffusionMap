@@ -1,6 +1,5 @@
-#PBS -q serial
-#PBS -l walltime=12:00:00
-#PBS -l vmem=20GB
+#PBS -q regular
+#PBS -l walltime=48:00:00
 
 source /project/projectdirs/cmb/modules/hpcports_NERSC.sh
 
@@ -8,4 +7,4 @@ hpcports shared_gnu
 module load pyfits-hpcp python-hpcp ipython-hpcp pyfits-hpcp rpy2-hpcp matplotlib-hpcp numpy-hpcp scipy-hpcp R-hpcp
 
 cd $PBS_O_WORKDIR
-python ./main.py
+aprun -n 1 python ./main.py 10 6 0.1

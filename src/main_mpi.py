@@ -468,7 +468,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
         figax= train_data.plot(color='b',alpha=0.1,s=10)
         train_data.plot(lambda x: self.catastrophe, color='r',alpha=1,s=20,figax=figax)
-        plt.savefig('outliers.png')
+        plt.savefig('../results/outliers.png')
 
         for i in xrange(6):
             crap = numpy.sort(self.dm.data_dm().x[:,i])
@@ -480,21 +480,21 @@ class MyEstimator(sklearn.base.BaseEstimator):
             cval=cm.to_rgba(self.dm.data_dm().x[:,i])
             figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
             figax[0].suptitle(str(i))
-            plt.savefig('splits.'+str(i)+'.png')
+            plt.savefig('../results/splits.'+str(i)+'.png')
 
         figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
         self.dm.data_dm().plot(lambda x: self.catastrophe,
             color='b',alpha=0.1,s=20,ndim=6,figax=figax)
-        plt.savefig('temp.png')
+        plt.savefig('../results/temp.png')
         figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
         self.dm.data_dm().plot(lambda x: self.catastrophe,
             color='b',alpha=0.2,s=20,ndim=6,figax=figax)
-        plt.savefig('temp2.png')
+        plt.savefig('../results/temp2.png')
 
         cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
         cval=cm.to_rgba(self.weight(x.x))
         figax= x.plot(c=cval,alpha=0.2,s=20,cmap=cm,vmin=0,vmax=cval.max())
-        plt.savefig('color_dm.png')
+        plt.savefig('../results/color_dm.png')
 
 #hp = hpy()
 
@@ -533,7 +533,7 @@ if __name__ == '__main__':
     print pdict
 
     from sklearn.externals import joblib
-    filename = 'clf_mpi.pkl'
+    filename = '../results/clf_mpi.pkl'
     if False: #os.path.isfile(filename):
         clf = joblib.load(filename) 
         #print 'get pickle'

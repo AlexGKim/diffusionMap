@@ -11,7 +11,7 @@ import pickle
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
+#from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.cm
 import matplotlib.colors
 #import matplotlib as mpl
@@ -32,7 +32,7 @@ import copy
 from matplotlib.legend_handler import HandlerNpoints
 from scipy.stats import norm
 from scipy.stats.mstats import moment
-from mpi4py import MPI
+
 #from guppy import hpy
 
 matplotlib.rc('figure', figsize=(11,11))
@@ -542,30 +542,34 @@ if __name__ == '__main__':
     else:
         # the new coordinate system based on the training data
         del(test_data)
-
+        from mpi4py import MPI
         me = MPI.COMM_WORLD.Get_rank()
 
-        me1=me/len(param_grid[0]['eps_par'])
-        me2 = me % len(param_grid[0]['eps_par'])
+        me1=me/len(param_grid[0]['eps_par'])/len(param_grid[0]['mask_var'])
+        me2=(me/len(param_grid[0]['mask_var'])) % len(param_grid[0]['eps_par'])
+        me3 = me % len(param_grid[0]['mask_var'])
         param_grid[0]['catastrophe_cut']=numpy.array([param_grid[0]['catastrophe_cut'][me1]])
         param_grid[0]['eps_par']=numpy.array([param_grid[0]['eps_par'][me2]])
+        param_grid[0]['mask_var']=numpy.array([param_grid[0]['mask_var'][me3]])
 
-        print me, me1, me2, param_grid
+        print me, me1, me2, me3, param_grid
 
         clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=pdict['n_jobs'],
             cv=pdict['cv'],pre_dispatch='n_jobs',refit=True)
         clf.fit(train_data.x,train_data.y)
 
-        clf = MPI.COMM_WORLD.gather(clf,root=0)
- 
+        clf_scores = MPI.COMM_WORLD.gather(clf.best_score_,root=0)
+
         if me==0:
-            best_score_= -1e10
-            for cl in clf:
-                print cl.best_score_, cl.best_params_
-                if cl.best_score_ > best_score_:
-                    best_score_= cl.best_score_
-                    bestcl=cl
-            joblib.dump(bestcl, filename) 
+            bestin = numpy.argmax(clf_scores)
+        else:
+            bestin=None
+
+        bestin = MPI.COMM_WORLD.bcast(bestin,root=0)
+
+        if me == bestin:
+            joblib.dump(clf, filename) 
+            print 'bestin',me,clf.best_params_
 
         import sys
         sys.exit()

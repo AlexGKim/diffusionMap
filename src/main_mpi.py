@@ -419,30 +419,38 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
 
         train_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,self.dm.data_dm().x)
-        # catastrophe_distances = train_dist[numpy.outer(self.catastrophe,self.catastrophe)]
-        # catastrophe_distances = catastrophe_distances[catastrophe_distances !=0]
-        # catastrophe_distances = numpy.sort(catastrophe_distances)
         numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
         train_min_dist = numpy.min(train_dist,axis=0)
         train_min_dist = numpy.sort(train_min_dist)
-        catastrophe_min_dist = train_min_dist[self.catastrophe] 
+        self.max_distance = train_min_dist[x.shape[0]*self.outlier_cut]
+
+        catastrophe_distances = train_dist[numpy.outer(self.catastrophe,self.catastrophe)]
+        catastrophe_distances = numpy.reshape(catastrophe_distances,(self.catastrophe.sum(),self.catastrophe.sum()))
+        catastrophe_min_dist=numpy.min(catastrophe_distances,axis=0)
+        # catastrophe_distances = catastrophe_distances[catastrophe_distances !=0]
+        # catastrophe_distances = numpy.sort(catastrophe_distances)
+        # catastrophe_min_dist = train_min_dist[self.catastrophe] 
         catastrophe_min_dist=numpy.log(catastrophe_min_dist)
         mu, std = norm.fit(catastrophe_min_dist)
         wok=numpy.abs(catastrophe_min_dist-mu)/std < 3
         mu, std = norm.fit(catastrophe_min_dist[wok])
-        self.max_distance = train_min_dist[x.shape[0]*self.outlier_cut]
         self.mask_scale = numpy.exp(mu+std*self.mask_var)
-
 
     def predict(self, x):
         return 0
 
     def weight(self,x):
-        x_dm = self.dm.transform(x)
+        if numpy.array_equal(x,self.dm.data.x):
+            x_dm=self.dm.data_dm().x
+        else:
+            x_dm = self.dm.transform(x)
 
         test_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,x_dm)   
-        test_min_dist = numpy.min(test_dist,axis=0)
 
+        if numpy.array_equal(x,self.dm.data.x):
+            numpy.fill_diagonal(test_dist,test_dist.max())
+
+        test_min_dist = numpy.min(test_dist,axis=0)
 
         closer  = test_min_dist < self.max_distance
         return numpy.exp(-(test_dist[self.catastrophe,:]/self.mask_scale)**2).sum(axis=0),closer
@@ -461,16 +469,16 @@ class MyEstimator(sklearn.base.BaseEstimator):
 #        w=numpy.logical_and(w,closer)
         ans=-moment(y[closer[w]],moment=4).item()
         sd= y[closer[w]].std()
-        print self.catastrophe_cut,self.eps_par,self.mask_var,ans,sd
+        print "{:6.3f} {:6.3f} {:6.3f} {:6.3f} {:8.3e}".format(self.catastrophe_cut,self.eps_par,self.mask_var,sd, ans)
         return ans
 
-    def plots(self,x):
+    def plots(self,data):
 
         figax= train_data.plot(color='b',alpha=0.1,s=10)
         train_data.plot(lambda x: self.catastrophe, color='r',alpha=1,s=20,figax=figax)
         plt.savefig('../results/outliers.png')
 
-        for i in xrange(6):
+        for i in xrange(4):
             crap = numpy.sort(self.dm.data_dm().x[:,i])
             crap= crap[len(crap)*.1:len(crap)*.9]
             sig = crap.std()
@@ -478,7 +486,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
                 norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
                     vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
             cval=cm.to_rgba(self.dm.data_dm().x[:,i])
-            figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
+            figax= train_data.plot(c=cval,alpha=0.5,s=20,cmap=cm)
             figax[0].suptitle(str(i))
             plt.savefig('../results/splits.'+str(i)+'.png')
 
@@ -492,9 +500,15 @@ class MyEstimator(sklearn.base.BaseEstimator):
         plt.savefig('../results/temp2.png')
 
         cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
-        cval=cm.to_rgba(self.weight(x.x))
-        figax= x.plot(c=cval,alpha=0.2,s=20,cmap=cm,vmin=0,vmax=cval.max())
+        weight, closer  = self.weight(data.x)
+        # mu, std = norm.fit(weight)
+        # mu,std= norm.fit(weight[numpy.abs(weight) < 3*std])
+        # maxweight = numpy.amin([weight.max(),std*3])
+        # weight[weight> maxweight]=maxweight
+        cval=cm.to_rgba(weight)
+        figax= data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
         plt.savefig('../results/color_dm.png')
+        
 
 #hp = hpy()
 
@@ -519,10 +533,7 @@ if __name__ == '__main__':
     train_data, test_data = manage_data(pdict['test_size'],rs)
     estimator = MyEstimator(catastrophe_cut=x0[0],
         eps_par=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
-#    estimator.fit(train_data.x, train_data.y)
-    # estimator.score(test_data, test_data.y)
-    # estimator.plots(test_data.x)
-    # optimize
+
     if pdict['test']:
       param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.05), 'eps_par': numpy.arange(-2,2,10),
        'mask_var': numpy.arange(-2,2.1,10)}]
@@ -530,7 +541,7 @@ if __name__ == '__main__':
       param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.01), 'eps_par': numpy.arange(-3,3.01,1),
       'mask_var': numpy.arange(-3,3.01,1)}]
 
-    print pdict
+    #print pdict
 
     from sklearn.externals import joblib
     filename = '../results/clf_mpi.pkl'
@@ -574,13 +585,16 @@ if __name__ == '__main__':
         import sys
         sys.exit()
 
-
-    print clf.best_params_
-    print clf.score(test_data.x,test_data.y)
+    clf.best_estimator_.plots(train_data)
+    # print clf.best_params_
+    # print clf.score(test_data.x,test_data.y)
     #get distances
- 
+ #    estimator.fit(train_data.x, train_data.y)
+    # estimator.score(test_data, test_data.y)
+    # estimator.plots(test_data.x)
+    # optimize
 
-
+    sdfsd
 
 
 

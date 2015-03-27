@@ -33,6 +33,14 @@ from matplotlib.legend_handler import HandlerNpoints
 from scipy.stats import norm
 from scipy.stats.mstats import moment
 
+usempi=True
+
+if usempi:
+    from mpi4py import MPI
+    me = MPI.COMM_WORLD.Get_rank()
+else:
+    me=0
+
 #from guppy import hpy
 
 matplotlib.rc('figure', figsize=(11,11))
@@ -196,8 +204,8 @@ class Data(object):
 
 def manage_data(test_size=0.1, random_state=7):
     # Load training data
-    import pyfits
-    f = pyfits.open('../data/stripe82_run_redmagic-1.0-08.fits')
+    import astropy.io.fits
+    f = astropy.io.fits.open('../data/stripe82_run_redmagic-1.0-08.fits')
     data = f[1].data
 
     # Get rid of entries without spectroscopic redshifts.
@@ -333,14 +341,14 @@ class DiffusionMap(object):
 class MyEstimator(sklearn.base.BaseEstimator):
     """docstring for MyEstimator"""
 
-    __slots__=['catastrophe_cut','eps_par','mask_var','catastrophe', 'dm', 'max_distance','mask_scale','outlier_cut','optimize_frac',
+    __slots__=['catastrophe_cut','eps_par','mask_var','catastrophe', 'dm', 'distance','mask_scale','outlier_cut','optimize_frac',
     'xlabel','ylabel']
 
     #this is for dubugging memory
     # ncalls = 0
 
     def __init__(self, catastrophe_cut=numpy.float_(0.05), eps_par=numpy.float_(0.),
-        mask_var=numpy.float_(1),xlabel=None,ylabel=None):
+        mask_var=numpy.float_(1),outlier_cut=numpy.float_(5.),xlabel=None,ylabel=None):
         super(MyEstimator, self).__init__()
 
         # self.params=dict()
@@ -352,13 +360,14 @@ class MyEstimator(sklearn.base.BaseEstimator):
         self.catastrophe_cut=catastrophe_cut
         self.eps_par=eps_par
         self.mask_var=mask_var
+        self.outlier_cut=outlier_cut
 
         self.catastrophe=None
         self.dm=None
-        self.max_distance=None
+        self.distance=None
         self.mask_scale=None
 
-        self.outlier_cut=0.95
+
         self.optimize_frac = 0.1
         self.xlabel=xlabel
         self.ylabel=ylabel
@@ -375,19 +384,20 @@ class MyEstimator(sklearn.base.BaseEstimator):
         params['catastrophe_cut']=self.catastrophe_cut
         params['eps_par']=self.eps_par
         params['mask_var']=self.mask_var
+        params['outlier_cut']=self.outlier_cut
         return params
 
     def set_params(self, catastrophe_cut=None, eps_par=None,
-        mask_var=None):
+        mask_var=None, outlier_cut=None):
         self.catastrophe_cut=catastrophe_cut
         self.eps_par=eps_par
         self.mask_var=mask_var
-
+        self.outlier_cut=outlier_cut
         return self
 
     def fit(self, x, y):
         del(self.catastrophe)
-        del(self.max_distance)
+        del(self.distance)
         del(self.mask_scale)
         del(self.dm)
 
@@ -421,8 +431,14 @@ class MyEstimator(sklearn.base.BaseEstimator):
         train_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,self.dm.data_dm().x)
         numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
         train_min_dist = numpy.min(train_dist,axis=0)
-        train_min_dist = numpy.sort(train_min_dist)
-        self.max_distance = train_min_dist[x.shape[0]*self.outlier_cut]
+        train_min_dist=numpy.log(train_min_dist)
+        mu, std = norm.fit(train_min_dist)
+        wok=numpy.abs(train_min_dist-mu)/std < 3
+        mu, std = norm.fit(train_min_dist[wok])
+        self.distance = numpy.exp(mu+0*std)
+#        train_min_dist = numpy.sort(train_min_dist)
+        # self.distance = numpy.exp(mu+self.outlier_cut*std)
+
 
         catastrophe_distances = train_dist[numpy.outer(self.catastrophe,self.catastrophe)]
         catastrophe_distances = numpy.reshape(catastrophe_distances,(self.catastrophe.sum(),self.catastrophe.sum()))
@@ -452,8 +468,14 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
         test_min_dist = numpy.min(test_dist,axis=0)
 
-        closer  = test_min_dist < self.max_distance
-        return numpy.exp(-(test_dist[self.catastrophe,:]/self.mask_scale)**2).sum(axis=0),closer
+        full_weight=numpy.exp(-(test_dist/self.distance)**2).sum(axis=0)
+
+        closer  = full_weight>self.outlier_cut
+        further  = full_weight<self.outlier_cut
+#        closer  = test_min_dist < self.distance
+        ans = numpy.exp(-(test_dist[self.catastrophe,:]/self.mask_scale)**2).sum(axis=0)
+        return ans,closer, full_weight
+
     
     def score(self,x,y):
         # x_dm = self.dm.transform(x)
@@ -461,21 +483,36 @@ class MyEstimator(sklearn.base.BaseEstimator):
         # test_dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x,x_dm)   
         # test_min_dist = numpy.min(test_dist,axis=0)
 
-        # closer  = test_min_dist < self.max_distance
+        # closer  = test_min_dist < self.distance
 
-        weight, closer = self.weight(x)
-        weight_sort=numpy.sort(weight[closer])
-        w=weight[closer] <= weight_sort[self.optimize_frac*len(weight_sort)]
-#        w=numpy.logical_and(w,closer)
-        ans=-moment(y[closer[w]],moment=4).item()
-        sd= y[closer[w]].std()
-        print "{:6.3f} {:6.3f} {:6.3f} {:6.3f} {:8.3e}".format(self.catastrophe_cut,self.eps_par,self.mask_var,sd, ans)
+        weight, closer, full_weight = self.weight(x)
+
+        weight_c=weight[closer]
+        y_c = y[closer]
+
+        # plt.scatter(full_weight,y)
+        # plt.scatter(full_weight[closer],y[closer],color='r')
+        # plt.show()
+
+        weight_sort_ind = numpy.argsort(weight_c)
+
+        num = self.optimize_frac*len(y)
+        #failure if not enough meet outlier cut
+        if len(y_c) < num:
+            ans = -sys.float_info.max
+            sd = 0
+        else:
+            ans=-moment(y_c[weight_sort_ind[0:num]],moment=4).item()
+            sd= y_c[weight_sort_ind[0:num]].std()
+
+        print "{:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6f} {:6.3f} {:8.3e}".format(self.catastrophe_cut,self.eps_par,
+            self.mask_var,self.outlier_cut,num, sd, ans)
         return ans
 
     def plots(self,data):
 
         figax= train_data.plot(color='b',alpha=0.1,s=10)
-        train_data.plot(lambda x: self.catastrophe, color='r',alpha=1,s=20,figax=figax)
+        train_data.plot(lambda x: self.catastrophe, color='r',alpha=0.2,s=20,figax=figax)
         plt.savefig('../results/outliers.png')
 
         for i in xrange(4):
@@ -530,7 +567,16 @@ if __name__ == '__main__':
     x0 = numpy.array([0.05,0.,0.05])
 
     # data
-    train_data, test_data = manage_data(pdict['test_size'],rs)
+    if usempi:
+        if me==0:
+            train_data, test_data = manage_data(pdict['test_size'],rs)
+        else:
+            train_data=None
+            test_data=None
+        (train_data, test_data) = MPI.COMM_WORLD.bcast((train_data, test_data),root=0)
+    else:
+        train_data, test_data = manage_data(pdict['test_size'],rs)
+
     estimator = MyEstimator(catastrophe_cut=x0[0],
         eps_par=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
 
@@ -538,14 +584,15 @@ if __name__ == '__main__':
       param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.05), 'eps_par': numpy.arange(-2,2,10),
        'mask_var': numpy.arange(-2,2.1,10)}]
     else:
-      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.01), 'eps_par': numpy.arange(-3,3.01,1),
-      'mask_var': numpy.arange(-3,3.01,1)}]
+        param_grid = [{'catastrophe_cut': numpy.arange(0.04,.10001,0.01), 'eps_par': numpy.arange(-2,2.01,1),
+            'mask_var': numpy.arange(-2,2.01,1), 'outlier_cut': numpy.arange(2,11.1,3)}]
 
     #print pdict
 
     from sklearn.externals import joblib
-    filename = '../results/clf_mpi.pkl'
-    if False: #os.path.isfile(filename):
+    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi.pkl'
+
+    if False:#os.path.isfile(filename):
         clf = joblib.load(filename) 
         #print 'get pickle'
         # pklfile=open(filename,'r')
@@ -553,39 +600,47 @@ if __name__ == '__main__':
     else:
         # the new coordinate system based on the training data
         del(test_data)
-        from mpi4py import MPI
-        me = MPI.COMM_WORLD.Get_rank()
 
-        me1=me/len(param_grid[0]['eps_par'])/len(param_grid[0]['mask_var'])
-        me2=(me/len(param_grid[0]['mask_var'])) % len(param_grid[0]['eps_par'])
-        me3 = me % len(param_grid[0]['mask_var'])
+
+
+        me1=me/len(param_grid[0]['eps_par'])/len(param_grid[0]['mask_var'])/len(param_grid[0]['outlier_cut'])
+        me2=(me/len(param_grid[0]['mask_var'])/len(param_grid[0]['outlier_cut'])) % len(param_grid[0]['eps_par'])
+        me3 = (me/len(param_grid[0]['outlier_cut'])) % len(param_grid[0]['mask_var'])
+        me4 = me % len(param_grid[0]['outlier_cut'])
+
+        print me,me1, me2, me3, me4,
+
         param_grid[0]['catastrophe_cut']=numpy.array([param_grid[0]['catastrophe_cut'][me1]])
         param_grid[0]['eps_par']=numpy.array([param_grid[0]['eps_par'][me2]])
         param_grid[0]['mask_var']=numpy.array([param_grid[0]['mask_var'][me3]])
-
-        print me, me1, me2, me3, param_grid
+        param_grid[0]['outlier_cut']=numpy.array([param_grid[0]['outlier_cut'][me4]])
+        print param_grid
 
         clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=pdict['n_jobs'],
             cv=pdict['cv'],pre_dispatch='n_jobs',refit=True)
         clf.fit(train_data.x,train_data.y)
 
-        clf_scores = MPI.COMM_WORLD.gather(clf.best_score_,root=0)
+        if usempi:
+            clf_scores = MPI.COMM_WORLD.gather(clf.best_score_,root=0)
 
-        if me==0:
-            bestin = numpy.argmax(clf_scores)
+            if me==0:
+                bestin = numpy.argmax(clf_scores)
+            else:
+                bestin=None
+
+            bestin = MPI.COMM_WORLD.bcast(bestin,root=0)
+
+            if me == bestin:
+                joblib.dump(clf, filename) 
+                print 'bestin',me,clf.best_params_
         else:
-            bestin=None
-
-        bestin = MPI.COMM_WORLD.bcast(bestin,root=0)
-
-        if me == bestin:
             joblib.dump(clf, filename) 
-            print 'bestin',me,clf.best_params_
 
         import sys
         sys.exit()
 
-    clf.best_estimator_.plots(train_data)
+    print clf.best_params_
+#    clf.best_estimator_.plots(train_data)
     # print clf.best_params_
     # print clf.score(test_data.x,test_data.y)
     #get distances

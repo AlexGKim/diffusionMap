@@ -4,7 +4,7 @@
 task.'''
 
 __author__ = 'Alex Kim <agkim@lbl.gov>'
-
+import sys
 import os
 import os.path
 import pickle
@@ -33,7 +33,7 @@ from matplotlib.legend_handler import HandlerNpoints
 from scipy.stats import norm
 from scipy.stats.mstats import moment
 
-usempi=True
+usempi=False
 
 if usempi:
     from mpi4py import MPI
@@ -338,6 +338,8 @@ class DiffusionMap(object):
         numpy.fill_diagonal(dist,dist.max()) #numpy.finfo('d').max)
         return numpy.min(dist,axis=0)
 
+
+
 class MyEstimator(sklearn.base.BaseEstimator):
     """docstring for MyEstimator"""
 
@@ -546,6 +548,126 @@ class MyEstimator(sklearn.base.BaseEstimator):
         figax= data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
         plt.savefig('../results/color_dm.png')
         
+class ColorEstimator(MyEstimator):
+    """docstring for ColorEstimator"""
+
+    __slots__=['catastrophe_cut', 'mask_var','catastrophe', 'dm', 'distance','mask_scale','outlier_cut','optimize_frac',
+    'xlabel','ylabel']
+
+    #this is for dubugging memory
+    # ncalls = 0
+
+    def __init__(self, catastrophe_cut=numpy.float_(0.05),
+        mask_var=numpy.float_(1),outlier_cut=numpy.float_(5.),xlabel=None,ylabel=None):
+        super(ColorEstimator, self).__init__()
+
+        # self.params=dict()
+        # self.params['catastrophe_cut']=catastrophe_cut
+        # self.params['eps_par']=eps_par
+        # self.params['mask_var']=mask_var
+
+        #these are the parameters
+        self.catastrophe_cut=catastrophe_cut
+        self.mask_var=mask_var
+        self.outlier_cut=outlier_cut
+
+        self.catastrophe=None
+        self.dm=None
+        self.distance=None
+        self.mask_scale=None
+
+
+        self.optimize_frac = 0.1
+        self.xlabel=xlabel
+        self.ylabel=ylabel
+
+    def get_params(self,deep=True):
+        params=dict()
+        params['catastrophe_cut']=self.catastrophe_cut
+        params['mask_var']=self.mask_var
+        params['outlier_cut']=self.outlier_cut
+        return params
+
+    def set_params(self, catastrophe_cut=None, 
+        mask_var=None, outlier_cut=None):
+        self.catastrophe_cut=catastrophe_cut
+        self.mask_var=mask_var
+        self.outlier_cut=outlier_cut
+        return self
+
+    def fit(self, x, y):
+        del(self.catastrophe)
+        del(self.distance)
+        del(self.mask_scale)
+        del(self.dm)
+
+        self.catastrophe = numpy.abs(y) > self.catastrophe_cut
+
+
+        # the new coordinate system based on the training data
+        self.data = Data(x,y,numpy.zeros(len(y)),xlabel=self.xlabel,ylabel=self.ylabel)
+            # self.dm=DiffusionMap(data,self.eps_par)
+            # mindist = self.dm.data_mindist()
+            # mindist= numpy.log(mindist)
+            # mu, std = norm.fit(mindist)
+            # wok=numpy.abs(mindist-mu)/std < 3
+            # mu, std = norm.fit(mindist[wok])
+            # self.dm.par = numpy.exp(mu+self.eps_par*std)
+            # self.dm.make_map()
+
+        train_dist = sklearn.metrics.pairwise_distances(self.data.x,self.data.x)
+        numpy.fill_diagonal(train_dist,train_dist.max()) #numpy.finfo('d').max)
+        train_dist[train_dist==0] = train_dist.max()
+        train_min_dist = numpy.min(train_dist,axis=0)
+        train_min_dist=numpy.log(train_min_dist)
+        mu, std = norm.fit(train_min_dist)
+        wok=numpy.abs(train_min_dist-mu)/std < 3
+        mu, std = norm.fit(train_min_dist[wok])
+        self.distance = numpy.exp(mu+0*std)
+#        train_min_dist = numpy.sort(train_min_dist)
+        # self.distance = numpy.exp(mu+self.outlier_cut*std)
+
+
+        catastrophe_distances = train_dist[numpy.outer(self.catastrophe,self.catastrophe)]
+        catastrophe_distances = numpy.reshape(catastrophe_distances,(self.catastrophe.sum(),self.catastrophe.sum()))
+        catastrophe_min_dist=numpy.min(catastrophe_distances,axis=0)
+        # catastrophe_distances = catastrophe_distances[catastrophe_distances !=0]
+        # catastrophe_distances = numpy.sort(catastrophe_distances)
+        # catastrophe_min_dist = train_min_dist[self.catastrophe] 
+        catastrophe_min_dist=numpy.log(catastrophe_min_dist)
+        mu, std = norm.fit(catastrophe_min_dist)
+        wok=numpy.abs(catastrophe_min_dist-mu)/std < 3
+        mu, std = norm.fit(catastrophe_min_dist[wok])
+        self.mask_scale = numpy.exp(mu+std*self.mask_var)
+
+    def weight(self,x):
+
+        test_dist = sklearn.metrics.pairwise_distances(self.data.x,x)   
+
+        if numpy.array_equal(x,self.data.x):
+            numpy.fill_diagonal(test_dist,test_dist.max())
+
+        test_min_dist = numpy.min(test_dist,axis=0)
+
+        full_weight=numpy.exp(-(test_dist/self.distance)**2).sum(axis=0)
+
+        closer  = full_weight>self.outlier_cut
+#        further  = full_weight<self.outlier_cut
+        ans = numpy.exp(-(test_dist[self.catastrophe,:]/self.mask_scale)**2).sum(axis=0)
+        return ans,closer, full_weight
+
+    def plots(self,data):
+
+        cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
+        weight, closer  = self.weight(data.x)
+        # mu, std = norm.fit(weight)
+        # mu,std= norm.fit(weight[numpy.abs(weight) < 3*std])
+        # maxweight = numpy.amin([weight.max(),std*3])
+        # weight[weight> maxweight]=maxweight
+        cval=cm.to_rgba(weight)
+        figax= data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
+        plt.savefig('../results/color_dm.png')
+        
 
 #hp = hpy()
 
@@ -577,20 +699,27 @@ if __name__ == '__main__':
     else:
         train_data, test_data = manage_data(pdict['test_size'],rs)
 
+    from sklearn.externals import joblib
+
+    #color space solution
+    param_grid = [{'catastrophe_cut': numpy.arange(0.03,.10001,0.01), 
+            'mask_var': numpy.arange(-2,2.01,1), 'outlier_cut': numpy.arange(2,8.1,2)}]
+    estimator = ColorEstimator(catastrophe_cut=x0[0],mask_var=x0[2],xlabel=train_data.xlabel,
+        ylabel=train_data.ylabel)
+    clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=1, cv=10,refit=True)
+    clf.fit(train_data.x,train_data.y)
+    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi_color.pkl'
+    joblib.dump(clf, filename) 
+    clf.score(test_data.x,test_data.y)
+    ewfwefw
+
+    #diffusion map solution
+    param_grid = [{'catastrophe_cut': numpy.arange(0.03,.10001,0.01), 'eps_par': numpy.arange(-2,2.01,1),
+            'mask_var': numpy.arange(-2,2.01,1), 'outlier_cut': numpy.arange(2,8.1,2)}]
     estimator = MyEstimator(catastrophe_cut=x0[0],
         eps_par=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
 
-    if pdict['test']:
-      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.05), 'eps_par': numpy.arange(-2,2,10),
-       'mask_var': numpy.arange(-2,2.1,10)}]
-    else:
-        param_grid = [{'catastrophe_cut': numpy.arange(0.04,.10001,0.01), 'eps_par': numpy.arange(-2,2.01,1),
-            'mask_var': numpy.arange(-2,2.01,1), 'outlier_cut': numpy.arange(2,11.1,3)}]
-
-    #print pdict
-
-    from sklearn.externals import joblib
-    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi.pkl'
+    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi_temp.pkl'
 
     if False:#os.path.isfile(filename):
         clf = joblib.load(filename) 
@@ -636,7 +765,6 @@ if __name__ == '__main__':
         else:
             joblib.dump(clf, filename) 
 
-        import sys
         sys.exit()
 
     print clf.best_params_

@@ -181,17 +181,41 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
   # del K
 
   D=numpy.exp(-D**2/eps_val)
-  v = numpy.sqrt(numpy.sum(D,axis=0))
-  D=D / numpy.outer(v,v)
+#sacrifice speed for less memory usage
+  val=[]
+  is_=[]
+  js_=[]
+  for i in xrange(D.shape[0]):
+    vi=numpy.sqrt(numpy.sum(D[i,:]))
+    for j in xrange(D.shape[1]):
+      vj=numpy.sqrt(numpy.sum(D[:,j]))
+      test = D[i,j]/vi/vj
+      if test>delta:
+        val.append(test)
+        is_.append(i)
+        js_.append(j)
+
+  Dshape = D.shape
+  del D
+
+  val=numpy.array(val)
+  is_=numpy.array(is_)
+  js_=numpy.array(js_)
+  Asp =  csc_matrix( (val,(is_,js_)), shape=Dshape)
+
+  # v = numpy.sqrt(numpy.sum(D,axis=0))
+  # D=D / numpy.outer(v,v)
   # for i in xrange(K.shape[0]):
   #   K[i,:]=K[i,:]/v
   # for j in xrange(K.shape[1]):
   #   K[:,j]=K[:,j]/v
-  A=D
+  # A=D
 
-  w=numpy.where(A > delta)
-  Asp =  csc_matrix( (A[w],(w[0],w[1])), shape=A.shape )
-  del A, D
+  # w=numpy.where(A > delta)
+  # Asp =  csc_matrix( (A[w],(w[0],w[1])), shape=A.shape )
+  # del A, D
+
+
   if neigen is None:
     neff = numpy.minimum(maxdim,n)
   else:
@@ -199,6 +223,9 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
   neff=neff.item() #convert numpy int to int
 
   evals, evecs = eigsh(Asp, k=neff, which='LA', ncv=numpy.maximum(30,2*neff) )
+
+  del Asp
+
   psi = evecs[:,neff-1::-1]/numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
   phi = evecs[:,neff-1::-1]*numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
 

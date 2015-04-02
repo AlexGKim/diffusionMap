@@ -182,28 +182,42 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
 
   D=numpy.exp(-D**2/eps_val)
 #sacrifice speed for less memory usage
-  val=[]
-  is_=[]
-  js_=[]
+  v = numpy.sqrt(numpy.sum(D,axis=0))
+
   for i in xrange(D.shape[0]):
-    vi=numpy.sqrt(numpy.sum(D[i,:]))
-    for j in xrange(D.shape[1]):
-      vj=numpy.sqrt(numpy.sum(D[:,j]))
-      test = D[i,j]/vi/vj
-      if test>delta:
-        val.append(test)
-        is_.append(i)
-        js_.append(j)
-
+    D[i,:]=D[i,:]/v
+  for j in xrange(D.shape[1]):
+    D[:,j]=D[:,j]/v
+  w=numpy.where(D > delta)
   Dshape = D.shape
-  del D
+  D=D[w]
+  Asp =  csc_matrix( (D,(w[0],w[1])), shape=Dshape )
 
-  val=numpy.array(val)
-  is_=numpy.array(is_)
-  js_=numpy.array(js_)
-  Asp =  csc_matrix( (val,(is_,js_)), shape=Dshape)
+#  val=[]
+#  is_=[]
+#  js_=[]
+#
+#  for i in xrange(D.shape[0]):
+#    print i
+#    for j in xrange(i,D.shape[1]):
+#      test = D[i,j]/v[i]/v[j]
+#      if test>delta:
+#        val.append(test)
+#        is_.append(i)
+#        js_.append(j)
+#        if i !=j:
+#           val.append(test)
+#           is_.append(j)
+#           js_.append(i)
+#  del v
+#  Dshape = D.shape
+#  del D
+#
+#  val=numpy.array(val)
+#  is_=numpy.array(is_)
+#  js_=numpy.array(js_)
+#  Asp =  csc_matrix( (val,(is_,js_)), shape=Dshape)
 
-  # v = numpy.sqrt(numpy.sum(D,axis=0))
   # D=D / numpy.outer(v,v)
   # for i in xrange(K.shape[0]):
   #   K[i,:]=K[i,:]/v
@@ -224,7 +238,7 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
 
   evals, evecs = eigsh(Asp, k=neff, which='LA', ncv=numpy.maximum(30,2*neff) )
 
-  del Asp
+  del D, Asp
 
   psi = evecs[:,neff-1::-1]/numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
   phi = evecs[:,neff-1::-1]*numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)

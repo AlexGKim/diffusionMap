@@ -5,7 +5,6 @@ task.'''
 
 __author__ = 'Danny Goldstein <dgold@berkeley.edu>'
 
-import pyfits
 import pickle
 import diffuse
 from sklearn.preprocessing import StandardScaler
@@ -66,8 +65,8 @@ def plot_dmap(dmap, fname, bias, nystrom=None, nystrombias=None):
 if __name__ == '__main__':
 
     # training data
-    Norig = 4000
-    Next = 1000
+    Norig = 400
+    Next = 100
     np.random.seed(0)
     t=np.random.uniform(size=Norig+Next)**.7*10
 #    t=runif(Norig+Next)^.7*10

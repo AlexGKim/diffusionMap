@@ -42,9 +42,11 @@ def diffuse(d, **kwargs):
     #xr=numpy.array(robjects.r.dist(d))
     # Python distance
     xr = scipy.spatial.distance.pdist(d, 'euclidean')
-    xr_arr=scipy.spatial.distance.squareform(xr)
+    del d
+#    xr_arr=scipy.spatial.distance.squareform(xr)
     #dmap = dM.diffuse(xr_arr, **kwargs)
-    dmap = diffuse_py(xr_arr, **kwargs)
+#    dmap = diffuse_py(xr_arr, **kwargs)
+    dmap = diffuse_py(xr, **kwargs)
     #dmap=dict()
     #dmap['X']=dmap_.rx('X')
     #dmap['phi0']=dmap_.rx('phi0')
@@ -155,7 +157,8 @@ def nystrom_py(dmap, Dnew, **kwargs):
 
 def epsilonCompute(D, p=0.01):
 
-#   D=scipy.spatial.distance.squareform(D)
+   D=scipy.spatial.distance.squareform(D)
+
    n = D.shape[0]
    k = numpy.ceil(p*n)
    k = numpy.maximum(2,k)
@@ -170,28 +173,100 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
   if eps_val == 'default':
     eps_val = epsilonCompute(D)
 
-  n=D.shape[0]
 
-  # Rewrite code for memory not speed
-
+  # original memory hog
   # K=numpy.exp(-D**2/eps_val)
   # v = numpy.sqrt(numpy.sum(K,axis=0))
   
   # A= K / numpy.outer(v,v)
   # del K
 
-  D=numpy.exp(-D**2/eps_val)
-#sacrifice speed for less memory usage
-  v = numpy.sqrt(numpy.sum(D,axis=0))
+  # D_=scipy.spatial.distance.squareform(D)
+  # n=D_.shape[0]
+  # D_=numpy.exp(-D_**2/eps_val)
+  # v = numpy.sqrt(numpy.sum(D_,axis=0))
+  # D_=D_ / numpy.outer(v,v)
 
-  for i in xrange(D.shape[0]):
-    D[i,:]=D[i,:]/v
-  for j in xrange(D.shape[1]):
-    D[:,j]=D[:,j]/v
-  w=numpy.where(D > delta)
-  Dshape = D.shape
+  # A=D_
+  # w=numpy.where(A > delta)
+  # Asp =  csc_matrix( (A[w],(w[0],w[1])), shape=A.shape )
+
+  #D is a "distance matrix"
+  n = int((1+numpy.sqrt(1+8.*D.shape[0])/2))
+
+
+  # Rewrite code for memory not speed
+  D=numpy.exp(-D**2/eps_val)
+  v= numpy.zeros(n)
+  for i in xrange(0,n):
+    indeces=[]
+    for a in xrange(0,i):
+      indeces.append(n*a - a*(a+1)/2 + i - 1 - a)
+    for a in xrange(i+1,n):
+      indeces.append(n*i - i*(i+1)/2 + a - 1 - i)
+    v[i]=1+D[indeces].sum()
+  v=numpy.sqrt(v)
+
+#  wha=[]
+  for i in xrange(n):
+    for j in xrange(i+1,n):
+        index = n*i - i*(i+1)/2 + j - 1 - i
+        D[index]=D[index]/v[i]/v[j]
+#        wha.append(D[index]-D_[i,j])
+#  wha=numpy.array(wha)
+
+
+  w=numpy.where(D > delta)[0]
   D=D[w]
-  Asp =  csc_matrix( (D,(w[0],w[1])), shape=Dshape )
+  is_=[]
+  js_=[]
+  for i in xrange(n):
+    for j in xrange(i+1,n):
+        index = n*i - i*(i+1)/2 + j - 1 - i
+        if index in w:
+          is_.append(i)
+          js_.append(j)
+
+  is_=numpy.array(is_)
+  js_=numpy.array(js_)
+
+  # limit=0
+  # for i in xrange(n):
+  #   use = numpy.logical_and(w >=limit, w< limit+(n-1-i))
+  #   is_[use]=i
+  #   js_[use]= w[use]-limit
+  #   for a,b,c in zip(w[use],is_[use],js[use]):
+  #     print a,n*b - b*(b+1)/2 + c - 1 - b
+  #   limit = limit + (n-1-i)
+  #   if not -1 in is_:
+  #     break
+
+  D=numpy.append(D,D)
+  tempis_=numpy.array(is_)
+  is_=numpy.append(is_,js_)
+  js_=numpy.append(js_,tempis_)
+  del tempis_
+  D=numpy.append(D,1/v/v)
+  is_=numpy.append(is_,numpy.arange(n,dtype='int'))
+  js_=numpy.append(js_,numpy.arange(n,dtype='int'))
+
+  Asp =  csc_matrix( (D,(is_,js_)), shape=(n,n) )
+
+
+
+
+#sacrifice speed for less memory usage
+  #D=scipy.spatial.distance.squareform(D)
+  # v = numpy.sqrt(numpy.sum(D,axis=0))
+
+  # for i in xrange(D.shape[0]):
+  #   D[i,:]=D[i,:]/v
+  # for j in xrange(D.shape[1]):
+  #   D[:,j]=D[:,j]/v
+  # w=numpy.where(D > delta)
+  # Dshape = D.shape
+  # D=D[w]
+  # Asp =  csc_matrix( (D,(w[0],w[1])), shape=Dshape )
 
 #  val=[]
 #  is_=[]
@@ -218,16 +293,8 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
 #  js_=numpy.array(js_)
 #  Asp =  csc_matrix( (val,(is_,js_)), shape=Dshape)
 
-  # D=D / numpy.outer(v,v)
-  # for i in xrange(K.shape[0]):
-  #   K[i,:]=K[i,:]/v
-  # for j in xrange(K.shape[1]):
-  #   K[:,j]=K[:,j]/v
-  # A=D
 
-  # w=numpy.where(A > delta)
-  # Asp =  csc_matrix( (A[w],(w[0],w[1])), shape=A.shape )
-  # del A, D
+
 
 
   if neigen is None:

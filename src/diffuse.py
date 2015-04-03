@@ -207,39 +207,16 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
     v[i]=1+D[indeces].sum()
   v=numpy.sqrt(v)
 
-#  wha=[]
-  for i in xrange(n):
-    for j in xrange(i+1,n):
-        index = n*i - i*(i+1)/2 + j - 1 - i
-        D[index]=D[index]/v[i]/v[j]
-#        wha.append(D[index]-D_[i,j])
-#  wha=numpy.array(wha)
-
+  w=numpy.arange(D.shape[0],dtype='int')
+  b = 1 -2*n 
+  is_ = (numpy.floor((-b - numpy.sqrt(b**2 - 8*w))/2)).astype('int',copy=False)
+  js_ = (w + is_*(b + is_ + 2)/2 + 1).astype('int',copy=False)
+  D=D/v[is_]/v[js_]
 
   w=numpy.where(D > delta)[0]
   D=D[w]
-  is_=[]
-  js_=[]
-  for i in xrange(n):
-    for j in xrange(i+1,n):
-        index = n*i - i*(i+1)/2 + j - 1 - i
-        if index in w:
-          is_.append(i)
-          js_.append(j)
-
-  is_=numpy.array(is_)
-  js_=numpy.array(js_)
-
-  # limit=0
-  # for i in xrange(n):
-  #   use = numpy.logical_and(w >=limit, w< limit+(n-1-i))
-  #   is_[use]=i
-  #   js_[use]= w[use]-limit
-  #   for a,b,c in zip(w[use],is_[use],js[use]):
-  #     print a,n*b - b*(b+1)/2 + c - 1 - b
-  #   limit = limit + (n-1-i)
-  #   if not -1 in is_:
-  #     break
+  is_ = (numpy.floor((-b - numpy.sqrt(b**2 - 8*w))/2)).astype('int',copy=False)
+  js_ = (w + is_*(b + is_ + 2)/2 + 1).astype('int',copy=False)
 
   D=numpy.append(D,D)
   tempis_=numpy.array(is_)
@@ -251,51 +228,6 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
   js_=numpy.append(js_,numpy.arange(n,dtype='int'))
 
   Asp =  csc_matrix( (D,(is_,js_)), shape=(n,n) )
-
-
-
-
-#sacrifice speed for less memory usage
-  #D=scipy.spatial.distance.squareform(D)
-  # v = numpy.sqrt(numpy.sum(D,axis=0))
-
-  # for i in xrange(D.shape[0]):
-  #   D[i,:]=D[i,:]/v
-  # for j in xrange(D.shape[1]):
-  #   D[:,j]=D[:,j]/v
-  # w=numpy.where(D > delta)
-  # Dshape = D.shape
-  # D=D[w]
-  # Asp =  csc_matrix( (D,(w[0],w[1])), shape=Dshape )
-
-#  val=[]
-#  is_=[]
-#  js_=[]
-#
-#  for i in xrange(D.shape[0]):
-#    print i
-#    for j in xrange(i,D.shape[1]):
-#      test = D[i,j]/v[i]/v[j]
-#      if test>delta:
-#        val.append(test)
-#        is_.append(i)
-#        js_.append(j)
-#        if i !=j:
-#           val.append(test)
-#           is_.append(j)
-#           js_.append(i)
-#  del v
-#  Dshape = D.shape
-#  del D
-#
-#  val=numpy.array(val)
-#  is_=numpy.array(is_)
-#  js_=numpy.array(js_)
-#  Asp =  csc_matrix( (val,(is_,js_)), shape=Dshape)
-
-
-
-
 
   if neigen is None:
     neff = numpy.minimum(maxdim,n)

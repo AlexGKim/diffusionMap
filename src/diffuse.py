@@ -196,22 +196,27 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
 
 
   # Rewrite code for memory not speed
-  D=numpy.exp(-D**2/eps_val)
+  numpy.exp(-D**2/eps_val, D)
   v= numpy.zeros(n)
   for i in xrange(0,n):
-    indeces=[]
-    for a in xrange(0,i):
-      indeces.append(n*a - a*(a+1)/2 + i - 1 - a)
-    for a in xrange(i+1,n):
-      indeces.append(n*i - i*(i+1)/2 + a - 1 - i)
-    v[i]=1+D[indeces].sum()
-  v=numpy.sqrt(v)
+    v[i]=1.
+    a = numpy.arange(i,dtype='int')
+    indeces = n*a - a*(a+1)/2 + i - 1 - a
+    v[i] = v[i]+D[indeces].sum()
+    a=numpy.arange(i+1,n,dtype='int')
+    indeces=n*i - i*(i+1)/2 + a - 1 - i
+    v[i] = v[i]+D[indeces].sum()
+  numpy.sqrt(v,v)
 
   w=numpy.arange(D.shape[0],dtype='int')
   b = 1 -2*n 
+  # is_ = (numpy.floor((-b - numpy.sqrt(b**2 - 8*w))/2)).astype('int',copy=False)
+  # js_ = (w + is_*(b + is_ + 2)/2 + 1).astype('int',copy=False)
+  # D=D/v[is_]/v[js_]
   is_ = (numpy.floor((-b - numpy.sqrt(b**2 - 8*w))/2)).astype('int',copy=False)
-  js_ = (w + is_*(b + is_ + 2)/2 + 1).astype('int',copy=False)
-  D=D/v[is_]/v[js_]
+  D /= v[is_]
+  is_ = (w + is_*(b + is_ + 2)/2 + 1).astype('int',copy=False)
+  D /= v[is_]
 
   w=numpy.where(D > delta)[0]
   D=D[w]
@@ -224,6 +229,7 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
   js_=numpy.append(js_,tempis_)
   del tempis_
   D=numpy.append(D,1/v/v)
+  del v
   is_=numpy.append(is_,numpy.arange(n,dtype='int'))
   js_=numpy.append(js_,numpy.arange(n,dtype='int'))
 

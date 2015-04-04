@@ -94,26 +94,30 @@ def nystrom(dmap, orig, d, sigma='default'):
     #### NOTE Take advantage of the fact that orig and d are temp object
 
 
-    # Concatenate new data to training data
+#     # Concatenate new data to training data
 
-    data_concat = np.concatenate((orig, d))
-    lenorig = len(orig)
-    del(orig)
-    del(d)
+#     data_concat = np.concatenate((orig, d))
+#     lenorig = len(orig)
+# #    del(orig)
+# #    del(d)
 
-    n_samp, n_feat = data_concat.shape
-    data_concat = data_concat.reshape(n_samp, 1, n_feat)
-#    data_concat_T = data_concat.reshape(1, n_samp, n_feat)
+#     n_samp, n_feat = data_concat.shape
+#     data_concat = data_concat.reshape(n_samp, 1, n_feat)
+# #    data_concat_T = data_concat.reshape(1, n_samp, n_feat)
 
-    # Compute one big distance matrix
-    xr = scipy.spatial.distance.pdist(data_concat[:,0,:], 'euclidean')
-    distmat = scipy.spatial.distance.squareform(xr)    
-#    distmat = np.sum((data_concat_T - data_concat)**2, axis=2)
+#     # Compute one big distance matrix
+#     xr = scipy.spatial.distance.pdist(data_concat[:,0,:], 'euclidean')
+#     distmat = scipy.spatial.distance.squareform(xr)    
+# #    distmat = np.sum((data_concat_T - data_concat)**2, axis=2)
     
-    # Slice off the part of the distance matrix that 
-    # represents distances from new data to original data
-    # distmat_slice = distmat[len(orig):, :len(orig)]
-    distmat_slice = distmat[lenorig :, :lenorig ]
+#     # Slice off the part of the distance matrix that 
+#     # represents distances from new data to original data
+#     # distmat_slice = distmat[len(orig):, :len(orig)]
+#     distmat_slice = distmat[lenorig :, :lenorig ]
+
+
+    distmat_slice = scipy.spatial.distance_matrix(d,orig)
+    del d,orig
 
     # Compute nystrom and return
 
@@ -126,7 +130,7 @@ def nystrom(dmap, orig, d, sigma='default'):
 
 def nystrom_py(dmap, Dnew, **kwargs):
 
-    Nnew, Nold  =  Dnew.shape
+#    Nnew, Nold  =  Dnew.shape
 #    eigenvals=numpy.array(dmap.rx('eigenvals')[0])
     eigenvals=dmap['eigenvals']
 #    X=numpy.array(dmap.rx('X')[0])
@@ -138,19 +142,27 @@ def nystrom_py(dmap, Dnew, **kwargs):
 
     #decrease memory footprint taking advantage that Dnew is temp
     # Xnew = numpy.exp(-Dnew**2/sigma)
-    Dnew = numpy.exp(-Dnew**2/sigma)
+    numpy.exp(-Dnew**2/sigma, Dnew)
     Xnew = Dnew
     v = numpy.sum(Xnew,axis=1)
 
     #some points are far away from the training set
     w = numpy.where(v !=0)
     bw = numpy.where( v==0)
-    for i in xrange(Xnew.shape[1]):
-      #Xnew[:,i]=Xnew[:,i]/v
-      Xnew[w,i]=Xnew[w,i]/v[w]
+
+    Xnew[w,:]/=v[w,None]
+
+    # for i in xrange(Xnew.shape[1]):
+    #   #Xnew[:,i]=Xnew[:,i]/v
+    #   Xnew[w,i]=Xnew[w,i]/v[w]
+
+
     dum = numpy.array(X)
-    for i in xrange(X.shape[1]):
-      dum[:,i]=X[:,i]/eigenvals[i]
+    dum /= eigenvals[None,:]
+
+    # for i in xrange(X.shape[1]):
+    #   dum[:,i]=X[:,i]/eigenvals[i]
+
     Xnew = numpy.dot(Xnew ,dum)
     Xnew[bw,:]=numpy.nan
     return Xnew

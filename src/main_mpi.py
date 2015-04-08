@@ -9,7 +9,7 @@ import os
 import os.path
 #import pickle
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 #from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.cm
@@ -361,6 +361,8 @@ class MyEstimator(sklearn.base.BaseEstimator):
     #this is for dubugging memory
     # ncalls = 0
 
+    extension = ''
+
     def __init__(self, catastrophe_cut=numpy.float_(0.05), eps_par=numpy.float_(0.),
         mask_var=numpy.float_(1),outlier_cut=numpy.float_(5.),xlabel=None,ylabel=None):
         super(MyEstimator, self).__init__()
@@ -507,34 +509,34 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
     def plots(self,data):
 
-        plt.clf()
-        figax= self.dm.data.plot(color='b',alpha=0.1,s=10)
-        self.dm.data.plot(lambda x: self.catastrophe, color='r',alpha=0.2,s=20,figax=figax)
-        plt.savefig('../results/outliers.png')
+        # plt.clf()
+        # figax= self.dm.data.plot(color='b',alpha=0.1,s=10)
+        # self.dm.data.plot(lambda x: self.catastrophe, color='r',alpha=0.2,s=20,figax=figax)
+        # plt.savefig('../results/outliers.png')
 
-        for i in xrange(4):
-            plt.clf()
-            crap = numpy.sort(self.dm.data_dm().x[:,i])
-            crap= crap[len(crap)*.1:len(crap)*.9]
-            sig = crap.std()
-            cm=matplotlib.cm.ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
-                    vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
-            cval=cm.to_rgba(self.dm.data_dm().x[:,i])
-            figax= self.dm.data.plot(c=cval,alpha=0.5,s=20,cmap=cm)
-            figax[0].suptitle(str(i))
-            plt.savefig('../results/splits.'+str(i)+'.png')
+        # for i in xrange(4):
+        #     plt.clf()
+        #     crap = numpy.sort(self.dm.data_dm().x[:,i])
+        #     crap= crap[len(crap)*.1:len(crap)*.9]
+        #     sig = crap.std()
+        #     cm=matplotlib.cm.ScalarMappable(
+        #         norm=matplotlib.colors.Normalize(vmin=crap[len(crap)/2]-5*sig,
+        #             vmax=crap[len(crap)/2]+5*sig),cmap='Spectral')
+        #     cval=cm.to_rgba(self.dm.data_dm().x[:,i])
+        #     figax= self.dm.data.plot(c=cval,alpha=0.5,s=20,cmap=cm)
+        #     figax[0].suptitle(str(i))
+        #     plt.savefig('../results/splits.'+str(i)+'.png')
 
-        plt.clf()
-        figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
-        self.dm.data_dm().plot(lambda x: self.catastrophe,
-            color='b',alpha=0.1,s=20,ndim=6,figax=figax)
-        plt.savefig('../results/temp.png')
-        plt.clf()
-        figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
-        self.dm.data_dm().plot(lambda x: self.catastrophe,
-            color='b',alpha=0.2,s=20,ndim=6,figax=figax)
-        plt.savefig('../results/temp2.png')
+        # plt.clf()
+        # figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
+        # self.dm.data_dm().plot(lambda x: self.catastrophe,
+        #     color='b',alpha=0.1,s=20,ndim=6,figax=figax)
+        # plt.savefig('../results/temp.png')
+        # plt.clf()
+        # figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
+        # self.dm.data_dm().plot(lambda x: self.catastrophe,
+        #     color='b',alpha=0.2,s=20,ndim=6,figax=figax)
+        # plt.savefig('../results/temp2.png')
 
         cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
         weight, closer,full_weight  = self.weight(data.x)
@@ -545,13 +547,31 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
         plt.clf()
         plt.scatter(full_weight,data.y)
-        plt.scatter(full_weight[closer],data.y[closer],color='r')
-        plt.savefig('../results/closer.png')
+        #plt.scatter(full_weight[closer],data.y[closer],color='r')
+        plt.xlabel('Outlier Weight')
+        plt.ylabel('Reshift Bias')
+        plt.savefig('../results/outlier'+self.__class__.extension+'.png')
+
+        plt.clf()
+        plt.scatter(weight,data.z)
+        plt.scatter(weight[closer],data.z[closer],color='r',label='Non-Outlier')
+        plt.xlabel('Catastropic Weight')
+        plt.ylabel('Reshift')
+        plt.legend()
+        plt.savefig('../results/redshift'+self.__class__.extension+'.png')
+
+        plt.clf()
+        plt.scatter(weight,data.y)
+        plt.scatter(weight[closer],data.y[closer],color='r',label='Non-Outlier')
+        plt.xlabel('Catastropic Weight')
+        plt.ylabel('Reshift Bias')
+        plt.legend()
+        plt.savefig('../results/catastrophic'+self.__class__.extension+'.png')
 
         plt.clf()
         cval=cm.to_rgba(weight)
         figax= data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
-        plt.savefig('../results/color_dm.png')
+        plt.savefig('../results/color_dm'+self.__class__.extension+'.png')
         
 class ColorEstimator(MyEstimator):
     """docstring for ColorEstimator"""
@@ -562,6 +582,7 @@ class ColorEstimator(MyEstimator):
     #this is for dubugging memory
     # ncalls = 0
 
+    extension = '_c'
     def __init__(self, catastrophe_cut=numpy.float_(0.05),
         mask_var=numpy.float_(1),outlier_cut=numpy.float_(5.),xlabel=None,ylabel=None):
         super(ColorEstimator, self).__init__()
@@ -646,23 +667,35 @@ class ColorEstimator(MyEstimator):
         ans = numpy.exp(-(test_dist[self.catastrophe,:]/self.mask_scale)).sum(axis=0)
         return ans,closer, full_weight
 
-    def plots(self,data):
+    # def plots(self,data):
 
-        cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
-        weight, closer, full_weight  = self.weight(data.x)
+    #     cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
+    #     weight, closer, full_weight  = self.weight(data.x)
 
-        plt.clf()
-        plt.scatter(full_weight,data.y)
-        plt.scatter(full_weight[closer],data.y[closer],color='r')
-        plt.savefig('../results/closer_c.png')
+    #     plt.clf()
+    #     plt.scatter(full_weight,data.y)
+    #     #plt.scatter(full_weight[closer],data.y[closer],color='r')
+    #     plt.xlabel('Outlier Weight')
+    #     plt.ylabel('Reshift Bias')
+    #     plt.savefig('../results/outlier_c.png')
 
-        # mu, std = norm.fit(weight)
-        # mu,std= norm.fit(weight[numpy.abs(weight) < 3*std])
-        # maxweight = numpy.amin([weight.max(),std*3])
-        # weight[weight> maxweight]=maxweight
-        cval=cm.to_rgba(weight)
-        figax= data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
-        plt.savefig('../results/color_dm_c.png')
+
+    #     plt.clf()
+    #     plt.scatter(weight,data.y)
+    #     plt.scatter(weight[closer],data.y[closer],color='r',label=['Non-Outlier'])
+    #     plt.xlabel('Catastropic Weight')
+    #     plt.ylabel('Reshift Bias')
+    #     plt.legend()
+    #     plt.savefig('../results/catastrophic_c.png')
+
+
+    #     # mu, std = norm.fit(weight)
+    #     # mu,std= norm.fit(weight[numpy.abs(weight) < 3*std])
+    #     # maxweight = numpy.amin([weight.max(),std*3])
+    #     # weight[weight> maxweight]=maxweight
+    #     cval=cm.to_rgba(weight)
+    #     figax= data.plot(c=cval,alpha=0.1,s=20,cmap=cm)
+    #     plt.savefig('../results/color_dm_c.png')
         
 
 #hp = hpy()

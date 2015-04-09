@@ -117,6 +117,7 @@ def nystrom(dmap, orig, d, sigma='default'):
 
 
     distmat_slice = scipy.spatial.distance_matrix(d,orig)
+
     del d,orig
 
     # Compute nystrom and return
@@ -130,13 +131,13 @@ def nystrom(dmap, orig, d, sigma='default'):
 
 def nystrom_py(dmap, Dnew, **kwargs):
 
-#    Nnew, Nold  =  Dnew.shape
+    Nnew, Nold  =  Dnew.shape
 #    eigenvals=numpy.array(dmap.rx('eigenvals')[0])
-    eigenvals=dmap['eigenvals']
+    eigenvals=dmap.eigenvals
 #    X=numpy.array(dmap.rx('X')[0])
-    X=dmap['X']
+    X=dmap.X
 #    sigma=dmap.rx('epsilon')[0]
-    sigma=dmap['epsilon']
+    sigma=dmap.epsilon
     if Nold != X.shape[0]:
       print "dimensions don't match"
 
@@ -179,6 +180,21 @@ def epsilonCompute(D, p=0.01):
    epsilon = 2*numpy.median(dist_knn)**2
    return epsilon
 
+class DiffuseOutput(object):
+  __slots__ = ['X', 'phi0', 'eigenvals', 'eigenmult','psi','phi','neigen','epsilon']
+
+  """docstring for DiffuseOutput"""
+  def __init__(self, X, phi0, eigenvals, lambd,psi,phi,neigen,eps_val):
+    super(DiffuseOutput, self).__init__()
+    self.X=X
+    self.phi0=phi0
+    self.eigenvals=eigenvals
+    self.eigenmult=lambd
+    self.psi=psi
+    self.phi=phi
+    self.neigen=neigen
+    self.epsilon=eps_val
+    
 def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.68):
     #### NOTE Take advantage of the fact that D is a temp object
 
@@ -257,8 +273,11 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
 
   del D, Asp
 
-  psi = evecs[:,neff-1::-1]/numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
-  phi = evecs[:,neff-1::-1]*numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
+  #don't bother with renormalization
+  psi = evecs[:,neff-1::-1]
+  phi = evecs[:,neff-1::-1]
+  # psi = evecs[:,neff-1::-1]/numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
+  # phi = evecs[:,neff-1::-1]*numpy.outer(evecs[:,neff-1],numpy.zeros(neff)+1)
 
   eigenvals = evals[neff-1::-1]#eigenvalues
 
@@ -279,14 +298,15 @@ def diffuse_py(D,eps_val='default',neigen=None,t=0,maxdim=50,delta=1e-5, var=0.6
       neigen= numpy.amax(numpy.where(lam > (1-var)))+1
       neigen = numpy.minimum(neigen,maxdim)
       eigenvals = eigenvals[0:neigen+1]
-    X = psi[:,1:neigen+1]*lambd[:,0:neigen]
-  y=dict()
-  y['X']=X
-  y['phi0']=phi[:,0]
-  y['eigenvals']=eigenvals[1:]
-  y['eigenmult']=lambd[:,:neigen]
-  y['psi']=psi
-  y['phi']=phi
-  y['neigen']=neigen
-  y['epsilon']=eps_val
+      X = psi[:,1:neigen+1]*lambd[:,0:neigen]
+      y=DiffuseOutput(X,phi[:,0],eigenvals[1:],lambd[:,:neigen],psi,phi,neigen,eps_val)
+  # y=dict()
+  # y['X']=X
+  # y['phi0']=phi[:,0]
+  # y['eigenvals']=eigenvals[1:]
+  # y['eigenmult']=lambd[:,:neigen]
+  # y['psi']=psi
+  # y['phi']=phi
+  # y['neigen']=neigen
+  # y['epsilon']=eps_val
   return y

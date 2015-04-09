@@ -1,0 +1,40 @@
+\documentclass[preprint]{aastex}
+\usepackage{amsmath,amssymb}
+\usepackage{mathrsfs}
+\bibliographystyle{plain}
+
+
+\begin{document}
+
+\title{Photometric Redshift Subsamples}
+\author{Alex Kim}
+
+\section{Introduction}
+
+The determination of galaxy redshifts from broad-band photometry (photometric redshifts) can provide redshift estimates
+for the large numbers of galaxies observed with multi-band imaging.  Most  galaxies do not have a
+spectroscopic redshift, so the use of photometric redshifts enables a bread range of science.  
+Given its importance, a diverse range of photometric-redshift algorithms are now available.
+
+Without fine spectral resolution, photometric redshift estimates are less precise and easily less accurate than redshifts
+determined from spectral features.  All algorithms to date exhibit non-Gaussian tails, referred to as catastrophic errors,
+in their distribution of the difference between photometric and spectroscopic redshifts (redshift error).
+These catastrophic errors limit
+the statistical power of a single galaxy redshift, and the accuracy of the ensemble of photometric redshifts.
+
+Although catastrophic errors plague the full ensemble of galaxies, there may be a subset of  galaxies identifiable through
+photometry that is free of catastrophic errors and/or has small dispersion in redshift error.  This article suggests
+criteria for defining such a subset, given a set of galaxies with
+photometric and spectroscopic redshifts.  One criterion is that a galaxy must be similar to other galaxies in the sample,
+under the assumption that ``singleton'' galaxies are less likely to have a robust photometric redshift.
+The second criterion is that a galaxy must be dissimilar to galaxies that have catastrophic error, making the assumption
+that such errors do not occur uniformly for all galaxies but preferentially in identifiable subclasses.
+The quantitative definition of ``similar'' and ``dissimilar'' is based on distances between galaxies; a galaxy with small
+distances to many other galaxies is considered similar, whereas a galaxy with large distances to the catastrophic outliers
+is considered dissimilar.
+
+Two distances are considered in this article.  The first is the Euclidian distance between points in color-magnitude
+space.  The second is the distance of a particular choice for the non-linear reparameterization of color-magnitude space:
+the Diffusion Map distance represents the connectivity between two points through a diffusion process on a graph.
+
+\end{document}

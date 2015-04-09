@@ -9,9 +9,12 @@ import os
 import os.path
 import pickle
 import matplotlib
-#matplotlib.use('Agg')
+print '1'
+matplotlib.use('Agg')
+print '2'
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
+print '3'
+#from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.cm
 import matplotlib.colors
 #import matplotlib as mpl
@@ -33,6 +36,8 @@ from matplotlib.legend_handler import HandlerNpoints
 from scipy.stats import norm
 from scipy.stats.mstats import moment
 #from mpi4py import MPI
+print '4'
+
 from utils import *
 import sys
 
@@ -57,7 +62,7 @@ def manage_data(test_size=0.1, random_state=7):
     dir='/project/projectdirs/desi/target/analysis/deep2/v1.0/'
     filenames = ['deep2egs-oii.fits.gz',  'deep2egs-phot.fits.gz',  'deep2egs-stars.fits.gz']
 
-    keys=['CFHTLS_G','CFHTLS_R','CFHTLS_Z','ZHELIO','CFHTLS_I','RA','DEC']
+    keys=['CFHTLS_G','CFHTLS_R','CFHTLS_Z','W1','W2','ZHELIO']
 
     import pyfits
     f = pyfits.open(dir+filenames[1])
@@ -68,27 +73,32 @@ def manage_data(test_size=0.1, random_state=7):
     notn99_p = photdata[keys[2]]!=-99.
     notn99_p = numpy.logical_and(notn99_p, photdata[keys[1]]!=-99.)
     notn99_p = numpy.logical_and(notn99_p, photdata[keys[0]]!=-99.)
+    notn99_p = numpy.logical_and(notn99_p, photdata[keys[3]]!=-99.)
+    notn99_p = numpy.logical_and(notn99_p, photdata[keys[4]]!=-99.)
 
     notn99_s = stardata[keys[2]]!=-99.
     notn99_s = numpy.logical_and(notn99_s, stardata[keys[1]]!=-99.)
     notn99_s = numpy.logical_and(notn99_s, stardata[keys[0]]!=-99.)
+    notn99_s = numpy.logical_and(notn99_s, stardata[keys[3]]!=-99.)
+    notn99_s = numpy.logical_and(notn99_s, stardata[keys[4]]!=-99.)
 
-    gmz_p= (photdata[keys[0]] - photdata[keys[2]])[notn99_p]
+    rmw1_p= (photdata[keys[1]] - photdata[keys[3]])[notn99_p]
     gmr_p= (photdata[keys[0]] - photdata[keys[1]])[notn99_p]
     rmz_p= (photdata[keys[1]] - photdata[keys[2]])[notn99_p]
+    rmz_p= (photdata[keys[1]] - photdata[keys[2]])[notn99_p]
+    w1mw2_p= (photdata[keys[3]] - photdata[keys[4]])[notn99_p]
 
-    temp = rmz_p.reshape(-1,1)
-    temp = numpy.hstack((temp,gmz_p.reshape(-1,1)))
-    temp = numpy.hstack((temp,rmz_p.reshape(-1,1)))
     objno_p = photdata['OBJNO'][notn99_p]
 
-    gmz_s= (stardata[keys[0]] - stardata[keys[2]])[notn99_s]
+    rmw1_s= (stardata[keys[1]] - stardata[keys[3]])[notn99_s]
     gmr_s= (stardata[keys[0]] - stardata[keys[1]])[notn99_s]
     rmz_s= (stardata[keys[1]] - stardata[keys[2]])[notn99_s]
+    w1mw2_s= (stardata[keys[3]] - stardata[keys[4]])[notn99_s]
 
     features = numpy.append(rmz_p, rmz_s).reshape(-1, 1)
-    features = numpy.hstack((features, numpy.append(gmz_p, gmz_s).reshape(-1, 1)))
+    features = numpy.hstack((features, numpy.append(rmw1_p, rmw1_s).reshape(-1, 1)))
     features = numpy.hstack((features, numpy.append(gmr_p, gmr_s).reshape(-1, 1)))
+    features = numpy.hstack((features, numpy.append(w1mw2_p, w1mw2_s).reshape(-1, 1)))
 
     f3 = pyfits.open(dir+filenames[0])
     oiidata = f3[1].data
@@ -100,7 +110,7 @@ def manage_data(test_size=0.1, random_state=7):
         photredshifts[w] = redshift
         photoii[w] = oiiflux
 
-    redshifts = numpy.append(photredshifts, numpy.zeros(notn99_s.sum()))
+    redshifts = numpy.append(photredshifts, numpy.zeros(notn99_s.sum())-1)
     oiifluxes = numpy.append(photoii, numpy.zeros(notn99_s.sum()))
 
     from sklearn.cross_validation import train_test_split
@@ -112,7 +122,8 @@ def manage_data(test_size=0.1, random_state=7):
                                                          test_size=test_size,
                                                          random_state=random_state)
 
-    return Data(X_train, y_train, z_train,xlabel=['g-z','r-z','g-r'], ylabel='redshifts',zlabel='oiifluxes'), Data(X_test,  y_test, z_test,xlabel=['g-z','r-z','g-r'], ylabel='redshifts',zlabel='oiifluxes')
+    return Data(X_train, y_train, z_train,xlabel=['r-z','r-w1','g-z','w1-w2'], ylabel='redshifts',zlabel='oiifluxes'), \
+        Data(X_test,  y_test, z_test,xlabel=['r-z','r-w1','g-z','w1-w2'], ylabel='redshifts',zlabel='oiifluxes')
 
 class MyEstimator(sklearn.base.BaseEstimator):
     """docstring for MyEstimator"""
@@ -176,9 +187,8 @@ class MyEstimator(sklearn.base.BaseEstimator):
         del(self.mask_scale)
         del(self.dm)
 
-        self.catastrophe = numpy.logical_and(y[:,0] > self.zmin,
-            numpy.logical_and(y[:,0]<self.zmax,y[:,1] > self.oiimin))
-
+        self.catastrophe = numpy.logical_or(y[:,0] < self.zmin,
+            numpy.logical_or(y[:,0] > self.zmax, y[:,1] < self.oiimin))
 
 
         if False: #os.path.isfile('estimator.pkl'):
@@ -245,8 +255,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
         weight, closer = self.weight(x)
         weight_sort=numpy.sort(weight[closer])
-        weight_sort = weight_sort[::-1]
-        w=weight[closer] >= weight_sort[self.optimize_frac*len(weight_sort)]
+        w=weight[closer] <= weight_sort[self.optimize_frac*len(weight_sort)]
 #        w=numpy.logical_and(w,closer)
         ans=-moment(y[closer[w]],moment=4).item()
         sd= y[closer[w]].std()
@@ -256,7 +265,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
     def plots(self,x):
 
         figax= train_data.plot(color='r',alpha=0.1,s=10)
-        train_data.plot(lambda x: self.catastrophe, color='b',alpha=0.1,s=10,figax=figax)
+        train_data.plot(lambda x: self.catastrophe, color='b',alpha=1,s=20,figax=figax)
         plt.savefig('../results/outliers.png')
 
         for i in xrange(6):
@@ -280,20 +289,20 @@ class MyEstimator(sklearn.base.BaseEstimator):
             color='b',alpha=0.2,s=20,ndim=6,figax=figax)
         plt.savefig('../results/temp2.png')
 
-        cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
-        cval=cm.to_rgba(self.weight(x.x))
-        figax= x.plot(c=cval,alpha=0.2,s=20,cmap=cm,vmin=0,vmax=cval.max())
-        plt.savefig('../results/color_dm.png')
+        # cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
+        # cval=cm.to_rgba(self.weight(x.x))
+        # figax= x.plot(c=cval,alpha=0.2,s=20,cmap=cm,vmin=0,vmax=cval.max())
+        # plt.savefig('../results/color_dm.png')
 
 
 if __name__ == '__main__':
-
+    print 'start'
     doplot = False
 
     parser = ArgumentParser()
     parser.add_argument('cv', nargs='?',default=3,type=int)
     parser.add_argument('n_jobs', nargs='?',default=1,type=int)
-    parser.add_argument('test_size', nargs='?',default=0.2,type=float)
+    parser.add_argument('test_size', nargs='?',default=0.1,type=float)
     parser.add_argument('seed', nargs='?',default=9)
     parser.add_argument('--test',default=False,type=bool)
     ins = parser.parse_args()
@@ -301,7 +310,7 @@ if __name__ == '__main__':
 
     rs = numpy.random.RandomState(pdict['seed'])
 
-    x0 = numpy.array([-2.,0.])
+    x0 = numpy.array([-2.5,0.])
 
     # data
     train_data, test_data = manage_data(pdict['test_size'],rs)
@@ -332,7 +341,7 @@ if __name__ == '__main__':
     print pdict
 
     from sklearn.externals import joblib
-    #filename = '../results/clf_mpi.pkl'
+    #filename = '../results/oii.pkl'
     if False: #os.path.isfile(filename):
         clf = joblib.load(filename) 
         #print 'get pickle'

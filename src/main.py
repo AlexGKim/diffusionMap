@@ -11,7 +11,7 @@ import pickle
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
+#from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.cm
 import matplotlib.colors
 #import matplotlib as mpl
@@ -31,6 +31,8 @@ import diffuse
 import copy
 from matplotlib.legend_handler import HandlerNpoints
 from scipy.stats import norm
+from scipy.stats.mstats import moment
+
 #from guppy import hpy
 
 matplotlib.rc('figure', figsize=(11,11))
@@ -457,16 +459,16 @@ class MyEstimator(sklearn.base.BaseEstimator):
         weight_sort=numpy.sort(weight[closer])
         w=weight[closer] <= weight_sort[self.optimize_frac*len(weight_sort)]
 #        w=numpy.logical_and(w,closer)
-
-        ans= -(y[closer[w]].std()**2)
-        print self.catastrophe_cut,self.eps_par,self.mask_var,numpy.sqrt(-ans)
+        ans=-moment(y[closer[w]],moment=4).item()
+        sd= y[closer[w]].std()
+        print self.catastrophe_cut,self.eps_par,self.mask_var,ans,sd
         return ans
 
     def plots(self,x):
 
         figax= train_data.plot(color='b',alpha=0.1,s=10)
         train_data.plot(lambda x: self.catastrophe, color='r',alpha=1,s=20,figax=figax)
-        plt.savefig('outliers.png')
+        plt.savefig('../results/outliers.png')
 
         for i in xrange(6):
             crap = numpy.sort(self.dm.data_dm().x[:,i])
@@ -478,21 +480,21 @@ class MyEstimator(sklearn.base.BaseEstimator):
             cval=cm.to_rgba(self.dm.data_dm().x[:,i])
             figax= train_data.plot(c=cval,alpha=0.3,s=20,cmap=cm)
             figax[0].suptitle(str(i))
-            plt.savefig('splits.'+str(i)+'.png')
+            plt.savefig('../results/splits.'+str(i)+'.png')
 
         figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,ndim=6)
         self.dm.data_dm().plot(lambda x: self.catastrophe,
             color='b',alpha=0.1,s=20,ndim=6,figax=figax)
-        plt.savefig('temp.png')
+        plt.savefig('../results/temp.png')
         figax= self.dm.data_dm().plot(color='r',alpha=0.1,s=10,nsig=20,ndim=6)
         self.dm.data_dm().plot(lambda x: self.catastrophe,
             color='b',alpha=0.2,s=20,ndim=6,figax=figax)
-        plt.savefig('temp2.png')
+        plt.savefig('../results/temp2.png')
 
         cm=matplotlib.cm.ScalarMappable(cmap='rainbow')
-        cval=cm.to_rgba(self.weight(x))
+        cval=cm.to_rgba(self.weight(x.x))
         figax= x.plot(c=cval,alpha=0.2,s=20,cmap=cm,vmin=0,vmax=cval.max())
-        plt.savefig('color_dm.png')
+        plt.savefig('../results/color_dm.png')
 
 #hp = hpy()
 
@@ -501,6 +503,7 @@ if __name__ == '__main__':
     doplot = False
 
     parser = ArgumentParser()
+    parser.add_argument('me', nargs='?',default=0,type=int)
     parser.add_argument('cv', nargs='?',default=3,type=int)
     parser.add_argument('n_jobs', nargs='?',default=1,type=int)
     parser.add_argument('test_size', nargs='?',default=0.1,type=float)
@@ -517,21 +520,22 @@ if __name__ == '__main__':
     train_data, test_data = manage_data(pdict['test_size'],rs)
     estimator = MyEstimator(catastrophe_cut=x0[0],
         eps_par=x0[1],mask_var=x0[2],xlabel=train_data.xlabel,ylabel=train_data.ylabel)
+
+
+
 #    estimator.fit(train_data.x, train_data.y)
     # estimator.score(test_data, test_data.y)
-    # estimator.plots(test_data)
+    # estimator.plots(test_data.x)
     # optimize
     if pdict['test']:
-      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.1), 'eps_par': numpy.arange(-2,2,10),
+      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.05), 'eps_par': numpy.arange(-2,2,10),
        'mask_var': numpy.arange(-2,2.1,10)}]
     else:
-      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.02), 'eps_par': numpy.arange(-2,2.01,1),
-      'mask_var': numpy.arange(-2,2.01,1)}]
-
-    print pdict
+      param_grid = [{'catastrophe_cut': numpy.arange(0.03,.1,0.01), 'eps_par': numpy.arange(-3,3.01,1),
+      'mask_var': numpy.arange(-3.,3,1)}]
 
     from sklearn.externals import joblib
-    filename = 'clf.pkl'
+    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi.'+str(pdict['me'])+'.pkl'
     if False: #os.path.isfile(filename):
         clf = joblib.load(filename) 
         #print 'get pickle'
@@ -540,20 +544,33 @@ if __name__ == '__main__':
     else:
         # the new coordinate system based on the training data
         del(test_data)
+
+        nmask=2
+
+
+        me1=pdict['me']/len(param_grid[0]['eps_par'])/(len(param_grid[0]['mask_var'])/nmask)
+        me2 = (pdict['me'] /(len(param_grid[0]['mask_var'])/nmask)) %len(param_grid[0]['eps_par'])
+        me3 = (pdict['me'] %  (len(param_grid[0]['mask_var'])/nmask))*nmask
+
+   
+        param_grid[0]['catastrophe_cut']=numpy.array([param_grid[0]['catastrophe_cut'][me1]])
+        param_grid[0]['eps_par']=numpy.array([param_grid[0]['eps_par'][me2]])
+        param_grid[0]['mask_var']=param_grid[0]['mask_var'][me3:me3+nmask]
+
         clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=pdict['n_jobs'],
             cv=pdict['cv'],pre_dispatch='n_jobs',refit=True)
         clf.fit(train_data.x,train_data.y)
+
+        print 'result', pdict['me'], param_grid , clf.best_params_, clf.best_score_
+
         joblib.dump(clf, filename) 
-#        pklfile=open(filename,'w')
-#        pickle.dump(clf,pklfile)
-#        pklfile.close()
+
         import sys
         sys.exit()
 
 
-    print clf.get_params()
+    print clf.best_params_
     print clf.score(test_data.x,test_data.y)
-
     #get distances
  
 

@@ -9,9 +9,9 @@ import os
 import os.path
 import pickle
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
+#from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.cm
 import matplotlib.colors
 #import matplotlib as mpl

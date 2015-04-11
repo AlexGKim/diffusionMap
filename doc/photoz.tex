@@ -33,8 +33,24 @@ The quantitative definition of ``similar'' and ``dissimilar'' is based on distan
 distances to many other galaxies is considered similar, whereas a galaxy with large distances to the catastrophic outliers
 is considered dissimilar.
 
-Two distances are considered in this article.  The first is the Euclidian distance between points in color-magnitude
+Two distances are considered in this study.  The first is the Euclidian distance between points in color-magnitude
 space.  The second is the distance of a particular choice for the non-linear reparameterization of color-magnitude space:
 the Diffusion Map distance represents the connectivity between two points through a diffusion process on a graph.
+
+\section{Data}
+An older catalog of REDMAGIC galaxies was provided by Eduardo Rozo in the file {\it stripe82\_\-run\_\-redmagic-1.0-08.fit}.
+The catalog contains a set of galaxies selected through selection criteria unknown to me and with photometric redshifts
+also with provenance unknown to me.  For this study, we use the subset with photometric redshift $0.1\le z_{phot} < 0.8$
+and a spectroscopic redshift $z_{spec}>0.01$.   The resulting set contains 18684 galaxies. 
+The $g-r$, $r-i$, $i-z$, and $i$ color and magnitude data are used
+as the features that describe the galaxies.
+
+
+\section{Identifying Robust Subsets}
+\subsection{Sample Splitting and $k$-Fold Cross-Validation}
+Before entering into the details of our procedure for identifying the subset of galaxies with low redshift-error dispersion
+we now briefly discuss $k$-fold cross-validation, the methodology used to avoid overtraining without significantly reducing
+the sample of galaxies used to optimize the process.  Training and test sets.  The test set is for the final validation of the method
+and uses no galaxies used in the training.  
 
 \end{document}

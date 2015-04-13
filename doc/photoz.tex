@@ -1,6 +1,9 @@
 \documentclass[preprint]{aastex}
 \usepackage{amsmath,amssymb}
 \usepackage{mathrsfs}
+
+\providecommand{\abs}[1]{\lvert#1\rvert}\providecommand{\norm}[1]{\lVert#1\rVert}
+
 \bibliographystyle{plain}
 
 
@@ -42,15 +45,85 @@ An older catalog of REDMAGIC galaxies was provided by Eduardo Rozo in the file {
 The catalog contains a set of galaxies selected through selection criteria unknown to me and with photometric redshifts
 also with provenance unknown to me.  For this study, we use the subset with photometric redshift $0.1\le z_{phot} < 0.8$
 and a spectroscopic redshift $z_{spec}>0.01$.   The resulting set contains 18684 galaxies. 
-The $g-r$, $r-i$, $i-z$, and $i$ color and magnitude data are used
-as the features that describe the galaxies.
+The catalog includes $griz$ magnitudes for each galaxy.
 
-
-\section{Identifying Robust Subsets}
+\section{Identifying Galaxy Subsets With Robust Photo-$z$}
 \subsection{Sample Splitting and $k$-Fold Cross-Validation}
 Before entering into the details of our procedure for identifying the subset of galaxies with low redshift-error dispersion
-we now briefly discuss $k$-fold cross-validation, the methodology used to avoid overtraining without significantly reducing
-the sample of galaxies used to optimize the process.  Training and test sets.  The test set is for the final validation of the method
-and uses no galaxies used in the training.  
+we now briefly discuss $k$-fold cross-validation, the methodology used to avoid overtraining while maintaining a large fraction
+of available galaxies to optimize the process.  The data is randomly divided so that 90\% are assigned to
+the Training set and the remaining 10\% to the Test set.  The Training set is used in the construction of the
+subset-selection procedure; the Test set is not used in this construction and is thus provides an assessment of the
+selection procedure unsusceptible to overtraining.  In this article, the validation of the performance of galaxy selection
+is based on the Test set.
+
+The procedure for subset selection is optimized with the Training set using $k$-folding.  The Training set is divided
+into $k=10$ groups of equal size (plus or minus one).  For each set of candidate values for the
+free  parameters to be optimized, the optimization metric is calculated $k$ times.  Each calculation of the optimization metric
+is derived from one of the $k$ groups used as a validation set, using the combined complementary $k-1$ groups to train
+the procedure.  The average of the $k$ 
+metrics is used as the metric for that set of candidate parameter values.  This metric is calculated for a range of candidate
+parameter values, from which the optimal set is found.  The final procedure, the one applied to the Test set, uses
+the optimal set of parameter values with the full Training set; in this manner the entire Training set is used with parameters
+optimized with an out-of-sample set to avoid overtraining.
+
+The procedure described in \S\ref{procedure:sec} is  run many times with different permutations
+of training and validation sets.  During the $k$-folding, the procedure is run
+on the different permutations of the combined $k-1$ group
+serving as the training set and the one out-of-sample group as the validation set.  After parameter optimization, the
+full Training set and Test set are used as the training and validation sets respectively.
+
+\subsection{Procedure for Subset Selection}
+\label{procedure:sec}
+The goal is to define criteria that identify subsets from the galaxy catalog that have low photometric-redshift error dispersion.
+We posit that poor photometric redshift determinations can be avoided by: 1) considering only galaxies 
+that are similar to other galaxies in the parent distribution; 2) excluding galaxies that are similar galaxies in
+the parent distribution that have catastrophic errors.
+
+The quantitative definition of ``similar'' is as follows.  Galaxies are described by a set of features, for
+example broadband magnitudes and colors.  A distance between galaxies in features can be chosen,
+for example the Euclidian distance on color-magnitude space.  For a galaxy $i$, we define the weight  as
+\begin{equation}
+w_i \equiv \sum_{j \in \{Galaxies\}} \exp{\left(-d_{ij}/\sigma\right)},
+\label{weight:eqn}
+\end{equation}
+where $d_{ij}$ is the distance between galaxies $i$ and $j$, and $\sigma$ is a characteristic
+length scale.  The weight is high if the galaxy has small distance to many other galaxies, which corresponds
+to the idea of  similar.  Conversely, a dissimilar galaxy has low weight, having large distances from the bulk
+of other galaxies.  We choose the exponential function as having the nice properties of having a contribution of one
+for galaxy pairs with identical features, and being smooth in feature space compared to square- and higher-order
+exponentials.  Otherwise there is nothing particularly special about this choice: the results in this article are
+specific to this definition of weight and the exploration of other functions is left for later work.
+
+The first posit entails selecting validation galaxies with analogues in the training set.  A weight $w^O$
+is introduced as in  Eqn.\ \ref{weight:eqn} with  $\{Galaxies\}$ being the training set. 
+The length scale is made flexible by setting $\sigma = l_O +
+n_O\delta l_O$.  The values of $l_O$ and $\delta l_O$ correspond to the mean and the standard deviation
+of the smallest distances between galaxies training set.  (Due to the shape of the distribution these values are actually derived
+from a fit of the $\ln{l}$ distribution after cutting $3\sigma$ outliers.)  Galaxies with weight $w^O>w_O$ are considered
+to have an analogue in the training set and are thus retained as a subset candidate.  The values of $n_O$
+and $w_O$ are free parameters of
+the procedure to be optimized.
+
+The second posit entails deselecting validation galaxies with analogues that have catastrophic redshift error
+in the training set.  In this case a weight $w^X$ is introduced as in in Eqn.\ \ref{weight:eqn}  with the $\{Galaxies\}$
+as the training-set galaxies with catastrophic errors.  A catastrophic error is
+defined as $\abs{z_{phot}-z_{spec}}> z_C$, where $z_C$ is a free parameter of the procedure.
+The length scale is described as $\sigma = l_X +
+n_X\delta l_X$, with the instruction of another free parameter $n_X$ and
+$l_X$ and $\delta l_X$ are determined as  $l_O$ and $\delta l_O$
+except using smallest distances between catastrophic outliers only.
+
+As an ad hoc choice, we choose a target size for the subset as 10\% of the training set.
+The subset is then defined as the galaxies with smallest valies of $w^X$ and with  $w^O>w_O$.
+
+The metric calculated for the subset is the fourth moment of the redshift error. The fourth moment, and not the
+second, is used to emphasize the contribution of the catastrophic outliers.  This metric is minimized
+in the optimization of the free parameters.
+
+To summarize, the procedure introduces the free parameters $n_O$, $n_X$ to account for the length scales
+used in defining similarity between galaxies.  The parameter $w_O$ defines whether a galaxy is considered
+a singleton or is similar to galaxies in the training set.
+Preferred $n$ over absolute numbers.
 
 \end{document}

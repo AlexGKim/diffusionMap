@@ -95,24 +95,24 @@ for galaxy pairs with identical features, and being smooth in feature space comp
 exponentials.  Otherwise there is nothing particularly special about this choice: the results in this article are
 specific to this definition of weight and the exploration of other functions is left for later work.
 
-The first posit entails selecting validation galaxies with analogues in the training set.  A weight $w^O$
+The first posit entails selecting validation galaxies with analogs in the training set.  A weight $w^O$
 is introduced as in  Eqn.\ \ref{weight:eqn} with  $\{Galaxies\}$ being the training set. 
-The length scale is made flexible by setting $\sigma = l_O +
+The length scale is made flexible by setting $\ln{\sigma} = l_O +
 n_O\delta l_O$.  The values of $l_O$ and $\delta l_O$ correspond to the mean and the standard deviation
-of the smallest distances between galaxies training set.  (Due to the shape of the distribution these values are actually derived
-from a fit of the $\ln{l}$ distribution after cutting $3\sigma$ outliers.)  Galaxies with weight $w^O>w_O$ are considered
-to have an analogue in the training set and are thus retained as a subset candidate.  The values of $n_O$
+of the logarithm of the  smallest distances between galaxies training set (based on a Gaussian fit on the distribution
+after cutting $>3\sigma$ outliers.)  Galaxies with weight $w^O>w_O$ are considered
+to have an analog in the training set and are thus retained as a subset candidate.  The values of $n_O$
 and $w_O$ are free parameters of
 the procedure to be optimized.
 
-The second posit entails deselecting validation galaxies with analogues that have catastrophic redshift error
+The second posit entails deselecting validation galaxies with analogs that have catastrophic redshift error
 in the training set.  In this case a weight $w^X$ is introduced as in in Eqn.\ \ref{weight:eqn}  with the $\{Galaxies\}$
 as the training-set galaxies with catastrophic errors.  A catastrophic error is
 defined as $\abs{z_{phot}-z_{spec}}> z_C$, where $z_C$ is a free parameter of the procedure.
-The length scale is described as $\sigma = l_X +
+The length scale is described as $\ln{\sigma} = l_X +
 n_X\delta l_X$, with the instruction of another free parameter $n_X$ and
 $l_X$ and $\delta l_X$ are determined as  $l_O$ and $\delta l_O$
-except using smallest distances between catastrophic outliers only.
+except using smallest logarithmic distances between catastrophic outliers only.
 
 As an ad hoc choice, we choose a target size for the subset as 10\% of the training set.
 The subset is then defined as the galaxies with smallest valies of $w^X$ and with  $w^O>w_O$.
@@ -122,8 +122,17 @@ second, is used to emphasize the contribution of the catastrophic outliers.  Thi
 in the optimization of the free parameters.
 
 To summarize, the procedure introduces the free parameters $n_O$, $n_X$ to account for the length scales
-used in defining similarity between galaxies.  The parameter $w_O$ defines whether a galaxy is considered
+used in defining similarity between galaxies.  
+The parameter $w_O$ defines whether a galaxy is considered
 a singleton or is similar to galaxies in the training set.
-Preferred $n$ over absolute numbers.
+The optimization is performed on a grid of values with $n_O, n_X \in \{-1,0,1\}$ and $w_O \in \{10,15,20,25\}$.
+Recall that the parameters are trained on a test set that is smaller than the full Test set that is ultimately applied.
+The length scale is described by the properties of the distribution of distances (through  $n_O$ and $n_X$)
+as the distribution of absolute distances depends on sample size.
+For a validation galaxy to have a training set analog does not require that it is a common occurrence in the
+parent population, so absolute numbers are used for $w_O$.
+
+\subsection{Distances}
+
 
 \end{document}

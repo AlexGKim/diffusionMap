@@ -49,16 +49,17 @@ if __name__ == '__main__':
 #    generic(train_data)
 
     filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi_color.pkl'
+    clf_c = joblib.load(filename)
+
+    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi.pkl'
     clf = joblib.load(filename)
 
-    # filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi.pkl'
-    # clf = joblib.load(filename)
 
 
-
-    print clf.best_params_
-    clf.best_estimator_.plots(train_data)
-    clf.score(test_data.x,test_data.y)
+    #print clf.best_params_
+    clf.best_estimator_.plots(test_data)
+    clf_c.best_estimator_.plots(test_data)
+    #clf.score(test_data.x,test_data.y)
     # print clf.best_params_
     # print clf.score(test_data.x,test_data.y)
     #get distances

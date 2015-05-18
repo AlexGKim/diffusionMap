@@ -561,14 +561,14 @@ class MyEstimator(sklearn.base.BaseEstimator):
         plt.savefig('../results/redshift'+self.__class__.extension+'.png')
 
         weight_c=weight[closer]
-        y_c = y[closer]
+        y_c = data.y[closer]
         weight_sort_ind = numpy.argsort(weight_c)
         fracs = numpy.arange(10,len(y_c),10)
         ans=numpy.zeros(len(fracs))
 
         for index , frac in enumerate(fracs):
             ans[index]= y_c[weight_sort_ind[0:frac]].std()
-        fracs=fracs/y.shape
+        fracs=fracs/data.y.shape
         plt.clf()
         plt.plot(fracs,ans)
         plt.savefig('../results/std'+self.__class__.extension+'.png')

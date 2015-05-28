@@ -32,7 +32,7 @@ import diffuse
 import copy
 from scipy.stats import norm
 from scipy.stats.mstats import moment
-from main_mpi import *
+from redmagic import *
 
 def generic(data):
     plt.scatter(data.z,data.y)
@@ -44,22 +44,26 @@ if __name__ == '__main__':
     from sklearn.externals import joblib
 
     rs = numpy.random.RandomState(9)
-    train_data, test_data = manage_data(0.1,rs)
+    train_data, test_data = manage_data(0.9,rs)
+
 
 #    generic(train_data)
 
-    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi_color.pkl'
-    clf_c = joblib.load(filename)
+    # filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi_color.pkl'
+    # clf_c = joblib.load(filename)
 
-    filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi.pkl'
+    filename = '/Users/akim/project/diffusionmap/results/clf_mpi.pkl'
     clf = joblib.load(filename)
 
 
 
     #print clf.best_params_
-    clf.best_estimator_.plots(test_data)
+    clf.best_estimator_.plots(train_data)
+
+
+    wefwef
     clf_c.best_estimator_.plots(test_data)
-    #clf.score(test_data.x,test_data.y)
+    #c
     # print clf.best_params_
     # print clf.score(test_data.x,test_data.y)
     #get distances

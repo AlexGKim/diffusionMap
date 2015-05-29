@@ -121,6 +121,34 @@ class Plots:
         
         return fig, axes
 
+    @staticmethod
+    def dataPlots(data):
+        plt.clf()
+        plt.scatter(data.z,-data.y+data.z,color='k',alpha=0.05,s=10,edgecolor='none')
+        plt.scatter(data.z[clump1(data)],-data.y[clump1(data)]+data.z[clump1(data)],color='b',label='clump 1',alpha=1,s=20,edgecolor='none')
+        plt.scatter(data.z[clump2(data)],-data.y[clump2(data)]+data.z[clump2(data)],color='g',label='clump 2',alpha=1,s=20,edgecolor='none')
+        plt.scatter(data.z[clump3(data)],-data.y[clump3(data)]+data.z[clump3(data)],color='r',label='clump 3',alpha=1,s=20,edgecolor='none')
+        plt.legend()
+        plt.savefig('../results/zz.png')
+
+        plt.clf()
+        figax= data.plot(color='k',alpha=0.02,s=10)
+        data.plot(clump1, color='b',alpha=1,s=20,figax=figax,label='clump 1')
+        data.plot(clump2, color='g',alpha=1,s=20,figax=figax,label='clump 2')
+        data.plot(clump3, color='r',alpha=1,s=20,figax=figax,label='clump 3')
+        plt.savefig('../results/outliers.png')
+
+    @staticmethod
+    def dmPlots(dm):
+        plt.clf()
+        figax= dm.data_dm().plot(color='k',alpha=0.01,s=10,nsig=4,ndim=5)
+        dm.data_dm().plot(clump1,
+            color='b',alpha=1,s=20,ndim=5,figax=figax,label='clump 1')
+        dm.data_dm().plot(clump2,
+            color='g',alpha=1,s=20,ndim=5,figax=figax,label='clump 2')
+        dm.data_dm().plot(clump3,
+            color='r',alpha=1,s=20,ndim=5,figax=figax,label='clump 3')
+        plt.savefig('../results/clump.png')
 
 class Data(object):
 
@@ -168,11 +196,24 @@ class Data(object):
     def stats(self):
         print self.y.mean(), self.y.std(), len(self.y)
 
-    def data_mindist(self):
-        dist = sklearn.metrics.pairwise_distances(self.x,self.x)
-        numpy.fill_diagonal(dist,dist.max()) #numpy.finfo('d').max)
-        dist  = numpy.sort(dist,axis=0)
-        return dist[int(0.01*dist.shape[0]),:]
+    # def data_mindist(self):
+    #     dist = sklearn.metrics.pairwise_distances(self.x,self.x)
+    #     numpy.fill_diagonal(dist,dist.max()) #numpy.finfo('d').max)
+    #     dist  = numpy.sort(dist,axis=0)
+    #     return dist[int(0.01*dist.shape[0]),:]
+
+    def onePercentDistances(self):
+        ans=numpy.zeros(self.x.shape[1])
+        for i in xrange(self.x.shape[1]):
+            dist = scipy.spatial.distance.pdist(self.x[:,i][:,None])
+            # dist = scipy.spatial.distance.squareform(dist)
+            # dist = numpy.sort(dist,axis=0)
+            # dist = dist[int(0.01*dist.shape[0]),:]
+            # numpy.log(dist,dist)
+            # mu, std = norm.fit(dist)
+            ans[i]=numpy.sort(dist)[int(0.01*dist.shape[0])]
+        return ans
+
 
     def plot(self,logic=None,**kwargs):
  
@@ -245,6 +286,7 @@ def manage_data(test_size=0.1, random_state=7):
     # Use G-R, R-I, I-Z colors and I absolute magnitude as features.
     features = sdata['MODEL_MAG'][:, :-1] - sdata['MODEL_MAG'][:, 1:] # colors
     features = numpy.hstack((features, sdata['IMAG'].reshape(-1, 1))) # i magnitude
+    features = numpy.hstack((features, sdata['ZREDMAGIC'].reshape(-1, 1))) # photo-z
 
     # Some cuts based on outliers
     # inds = features[:,0] <4
@@ -269,8 +311,8 @@ def manage_data(test_size=0.1, random_state=7):
                                                          test_size=test_size,
                                                          random_state=random_state)
 
-    return Data(X_train, y_train, z_train,dz_train, xlabel=['u-g','g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z'), \
-        Data(X_test,  y_test, z_test,dz_test,xlabel=['u-g','g-r','r-i','i-z','i'], ylabel='bias',zlabel='photo-z')
+    return Data(X_train, y_train, z_train,dz_train, xlabel=['u-g','g-r','r-i','i-z','i','Photo-z'], ylabel='bias',zlabel='photo-z'), \
+        Data(X_test,  y_test, z_test,dz_test,xlabel=['u-g','g-r','r-i','i-z','i','Photo-z'], ylabel='bias',zlabel='photo-z')
 
 
 import resource
@@ -290,16 +332,25 @@ class DiffusionMap(object):
        the value of eps_val
 
     """
-    __slots__=['data','par', 'key', 'neigen','weight','dmap','neigen','__weakref__']
+    __slots__=['data','par', 'key', 'neigen','metric','dmap','neigen','__weakref__']
 
     def __init__(self, data, par, label=None):
         super(DiffusionMap, self).__init__()
         self.data = data
+        self.metric=1./ data.onePercentDistances()
+        #self metric= numpy.array([1./5,1.,1./.5,1./.5,1./5,1./.5])
         self.par = par  #for the moment eps_val
         self.key=label
-        self.weight= numpy.array([1.,1.,1.,1.,1.])
         self.dmap=None
         self.neigen=None
+
+
+    def onePercentDistances(self):
+        dist = scipy.spatial.distance.pdist(self.data.x*self.metric)
+        dist = scipy.spatial.distance.squareform(dist)
+        dist=numpy.sort(dist,axis=0)
+        return dist[int(0.01*dist.shape[0]),:]
+
 
     def make_map(self):
 
@@ -313,8 +364,8 @@ class DiffusionMap(object):
         kwargs['delta']=1e-8
         kwargs['var']=0.95
 
-        #### NOTE Take advantage of the fact that self.data.x*self.weight is a temp object
-        self.dmap = diffuse.diffuse(self.data.x*self.weight,**kwargs)
+        #### NOTE Take advantage of the fact that self.data.x*self metric is a temp object
+        self.dmap = diffuse.diffuse(self.data.x*self.metric,**kwargs)
 
         #to save memory use memory map
         temp_folder = tempfile.mkdtemp()
@@ -342,9 +393,9 @@ class DiffusionMap(object):
         '~numpy.ndarray'
           DM coordinates for a set of points
         """
-        #### NOTE Take advantage of the fact that self.data.x*self.weight is a temp object
+        #### NOTE Take advantage of the fact that self.data.x*self metric is a temp object
 
-        return diffuse.nystrom(self.dmap, self.data.x*self.weight, x*self.weight)
+        return diffuse.nystrom(self.dmap, self.data.x*self.metric, x*self.metric)
 
 
     def plot(self,ax, oplot=False, **kwargs):
@@ -367,7 +418,7 @@ class DiffusionMap(object):
         return Data(self.dmap.X,self.data.y,self.data.z,self.data.dz,xlabel=[str(i) for i in xrange(self.neigen)])
 
     # def data_mindist(self):
-    #     dist = sklearn.metrics.pairwise_distances(self.data.x*self.weight,self.data.x*self.weight)
+    #     dist = sklearn.metrics.pairwise_distances(self.data.x*self metric,self.data.x*self metric)
     #     numpy.fill_diagonal(dist,dist.max()) #numpy.finfo('d').max)
     #     dist  = numpy.sort(dist,axis=0)
     #     return dist[int(0.01*dist.shape[0]),:]
@@ -429,7 +480,8 @@ class MyEstimator(sklearn.base.BaseEstimator):
             # the new coordinate system based on the training data
             data = Data(x,y,None,None,xlabel=self.xlabel,ylabel=self.ylabel)
             self.dm=DiffusionMap(data,self.eps_par)
-            mindist = self.dm.data.data_mindist()
+            mindist = self.dm.onePercentDistances()
+#            mindist = self.dm.data.data_mindist()
             numpy.log(mindist,mindist)
             mu, std = norm.fit(mindist)
             wok=numpy.abs(mindist-mu)/std < 3
@@ -489,12 +541,12 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
 
         # figure out which guys are in a clump and which are not
-        clump = numpy.logical_or(clump1(self.dm.data_dm()),
-            numpy.logical_or(clump2(self.dm.data_dm()),clump3(self.dm.data_dm())))
+        clump = numpy.logical_or(clump1(self.dm.data),
+            numpy.logical_or(clump2(self.dm.data),clump3(self.dm.data)))
 
-        notclump = numpy.logical_and(numpy.logical_not(clump1(self.dm.data_dm())),
-            numpy.logical_and(numpy.logical_not(clump2(self.dm.data_dm())),
-                numpy.logical_not(clump3(self.dm.data_dm()))))
+        notclump = numpy.logical_and(numpy.logical_not(clump1(self.dm.data)),
+            numpy.logical_and(numpy.logical_not(clump2(self.dm.data)),
+                numpy.logical_not(clump3(self.dm.data))))
 
 
         dist = sklearn.metrics.pairwise_distances(self.dm.data_dm().x[clump,:],self.dm.data_dm().x[clump,:])
@@ -545,22 +597,23 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
         # closer  = test_min_dist < self.distance
 
-        weight, closer, full_weight = self.weight(x)
+        weight = self.weight(x)
 
-        weight_c=weight[closer]
-        y_c = y[closer]
+        # weight_c=weight[closer]
+        # y_c = y[closer]
 
-        weight_sort_ind = numpy.argsort(weight_c)
+        weight_sort_ind = numpy.argsort(weight)
 
-        num = self.optimize_frac*len(y)
-        #failure if not enough meet outlier cut
-        if len(y_c) < num:
-            ans = -sys.float_info.max
-            sd = 0
-        else:
-            ans=-moment(y_c[weight_sort_ind[0:num]],moment=4).item()
-            sd= y_c[weight_sort_ind[0:num]].std()
+        # num = self.optimize_frac*len(y)
+        # #failure if not enough meet outlier cut
+        # if len(y_c) < num:
+        #     ans = -sys.float_info.max
+        #     sd = 0
+        # else:
+        #     ans=-moment(y_c[weight_sort_ind[0:num]],moment=4).item()
+        #     sd= y_c[weight_sort_ind[0:num]].std()
 
+        ans=-moment(y_c[weight_sort_ind[0:num]],moment=4).item()
         print "{:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6f} {:6.3f} {:8.3e}".format(self.catastrophe_cut,self.eps_par,
             self.mask_var,self.outlier_cut,num, sd, ans)
         return ans
@@ -570,22 +623,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
     def plots(self,data):
 
 
-        plt.clf()
-        plt.scatter(data.z,-data.y+data.z,color='k',alpha=0.05,s=10,edgecolor='none')
-        plt.scatter(data.z[clump1(data)],-data.y[clump1(data)]+data.z[clump1(data)],color='b',label='clump 1',alpha=1,s=20,edgecolor='none')
-        plt.scatter(data.z[clump2(data)],-data.y[clump2(data)]+data.z[clump2(data)],color='g',label='clump 2',alpha=1,s=20,edgecolor='none')
-        plt.scatter(data.z[clump3(data)],-data.y[clump3(data)]+data.z[clump3(data)],color='r',label='clump 3',alpha=1,s=20,edgecolor='none')
-        plt.legend()
-        plt.savefig('../results/zz.png')
 
-        plt.clf()
-        figax= self.dm.data.plot(color='k',alpha=0.02,s=10)
- #       self.dm.data.plot(lambda x: self.catastrophe, color='r',alpha=0.2,s=20,figax=figax)
-        self.dm.data.plot(clump1, color='b',alpha=1,s=20,figax=figax,label='clump 1')
-        self.dm.data.plot(clump2, color='g',alpha=1,s=20,figax=figax,label='clump 2')
-        self.dm.data.plot(clump3, color='r',alpha=1,s=20,figax=figax,label='clump 3')
-        # plt.legend()
-        plt.savefig('../results/outliers.png')
         # for i in xrange(4):
         #     plt.clf()
         #     crap = numpy.sort(self.dm.data_dm().x[:,i])
@@ -834,6 +872,23 @@ if __name__ == '__main__':
     _ = gc.collect()
 
     train_data = joblib.load(filename, mmap_mode='r')
+
+    Plots.dataPlots(train_data)
+
+    eps_par=0
+#            mindist = self.dm.data.data_mindist()
+
+    dm=DiffusionMap(train_data,0)
+    mindist = dm.onePercentDistances()
+    numpy.log(mindist,mindist)
+    mu, std = norm.fit(mindist)
+    wok=numpy.abs(mindist-mu)/std < 3
+    mu, std = norm.fit(mindist[wok])
+    dm.par = (numpy.exp(mu+eps_par*std))**2
+    dm.make_map()
+    Plots.dmPlots(dm)
+    wqewfwe
+
 
     #color space solution
 #     param_grid = [{'catastrophe_cut': numpy.arange(0.03,.091,0.03), 

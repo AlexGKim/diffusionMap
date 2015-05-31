@@ -36,6 +36,8 @@ from sklearn.externals import joblib
 import tempfile
 import gc
 
+matplotlib.rc('figure', figsize=(11,11))
+
 usempi=False
 
 if usempi:
@@ -46,7 +48,6 @@ else:
 
 #from guppy import hpy
 
-matplotlib.rc('figure', figsize=(11,11))
 
 def clump1(data):
         return numpy.logical_and(-5*data.dz > data.y, data.z<0.2)
@@ -446,16 +447,16 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
     # __slots__=['eps_par','xlabel','ylabel']
 
-    def __init__(self, eps_par=numpy.float_(0.)):
+    def __init__(self, classifier,eps_par=numpy.float_(0.)):
         super(MyEstimator, self).__init__()
 
         #these are the parameters
         self.eps_par=eps_par
 
         self.dm=None
-        self.estimator = sklearn.svm.SVC()
+        self.estimator = classifier()
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         # the new coordinate system based on the training X
         self.dm=DiffusionMap(X,self.eps_par)
         mindist = self.dm.onePercentDistances()
@@ -466,7 +467,7 @@ class MyEstimator(sklearn.base.BaseEstimator):
         self.dm.par = (numpy.exp(mu+self.eps_par*std))**2
         self.dm.make_map()
 
-        return self.estimator.fit(self.dm.dmap.X, y)
+        return self.estimator.fit(self.dm.dmap.X, y, sample_weight=sample_weight)
 
     def predict(self, x):
         X = self.dm.transform(x)
@@ -474,9 +475,12 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
     def score(self,x,y):
         X = self.dm.transform(x)
-        return self.estimator.score(X,y)  
+        ans = self.estimator.score(X,y)
+        print ans
 
 if __name__ == '__main__':
+
+    classifier = sklearn.ensemble.RandomForestClassifier
 
     doplot = False
 
@@ -502,18 +506,29 @@ if __name__ == '__main__':
     else:
         train_data, test_data = manage_data(pdict['test_size'],rs)
 
-
-
     temp_folder = tempfile.mkdtemp()
     filename = os.path.join(temp_folder, 'train_data.mmap')
     if os.path.exists(filename): os.unlink(filename)
     _ = joblib.dump(train_data ,filename)
-    del train_data,test_data
+    #del train_data,test_data
     _ = gc.collect()
 
     train_data = joblib.load(filename, mmap_mode='r')
 
-    # Plots.dataPlots(train_data)
+    train_y = clump1(train_data)+2*clump2(train_data)+3*clump3(train_data)
+    test_y = clump1(test_data)+2*clump2(test_data)+3*clump3(test_data)
+
+    c = classifier()
+    c.fit(train_data.x,train_y,sample_weight=(train_y !=0).astype(int))
+    w=test_y != 0
+    print c.score(test_data.x[w],test_y[w])
+
+    c=MyEstimator(classifier)
+    c.fit(train_data.x,train_y,sample_weight=(train_y !=0).astype(int))
+    print c.score(test_data.x[w],test_y[w])
+
+    wefwef
+    # Plots.dataPlots(test_data)
 
     # eps_par=0
     # dm=DiffusionMap(train_data.x,0)
@@ -528,7 +543,7 @@ if __name__ == '__main__':
 
     #color space solution
     param_grid = [{'eps_par': numpy.arange(-1,1.01,1)}]
-    estimator = MyEstimator()
+    estimator = MyEstimator(classifier)
     clf = sklearn.grid_search.GridSearchCV(estimator, param_grid, n_jobs=1, cv=3,refit=True)
     clf.fit(train_data.x,train_data.y)
     filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi_color.pkl'

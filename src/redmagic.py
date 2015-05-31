@@ -441,7 +441,7 @@ class DiffusionMap(object):
     #     return dist[int(0.01*dist.shape[0]),:]
         #return numpy.min(dist,axis=0)
 
-class MyEstimator(sklearn.svm.SVC):
+class MyEstimator(sklearn.base.BaseEstimator):
     """docstring for MyEstimator"""
 
     # __slots__=['eps_par','xlabel','ylabel']
@@ -453,7 +453,7 @@ class MyEstimator(sklearn.svm.SVC):
         self.eps_par=eps_par
 
         self.dm=None
-
+        self.estimator = sklearn.svm.SVC()
 
     def fit(self, X, y):
         # the new coordinate system based on the training X
@@ -466,13 +466,15 @@ class MyEstimator(sklearn.svm.SVC):
         self.dm.par = (numpy.exp(mu+self.eps_par*std))**2
         self.dm.make_map()
 
-        return super(MyEstimator, self).fit(self.dm.X, y)
+        return self.estimator.fit(self.dm.dmap.X, y)
 
-    def predict(self, x, y):
-        X = self.dm.transform(X)
+    def predict(self, x):
+        X = self.dm.transform(x)
+        return self.estimator.predict(X)
 
-        return super(MyEstimator, self).predict(X, y)
-  
+    def score(self,x,y):
+        X = self.dm.transform(x)
+        return self.estimator.score(X,y)  
 
 if __name__ == '__main__':
 

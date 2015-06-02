@@ -293,6 +293,29 @@ def manage_data(test_size=0.1, random_state=7):
     inds = numpy.logical_and(sdata['ZREDMAGIC'] >= zmin, sdata['ZREDMAGIC'] < zmax)
     sdata = sdata[inds]
 
+    ids = "("+",".join(map(str,sdata['ID'][0:10]))+")"
+
+    import cx_Oracle
+    import ConfigParser
+    from os.path import expanduser
+
+    home = expanduser("~")
+    configfile = home+'/.desservices.ini'
+    config = ConfigParser.RawConfigParser()
+    config.read(configfile)
+    server = config.get('db-dessci','server')
+    user= config.get('db-dessci','user')
+    passwd= config.get('db-dessci','passwd')
+    name= config.get('db-dessci','name')
+    connection = cx_Oracle.connect(user+'/'+passwd+'@'+server+'/'+name)
+    cursor = connection.cursor()
+
+    command = "select * from SVA1_COADD where coadd_objects_id in "+ids
+    print command
+    cursor.execute(command)
+    for row in cursor:
+      print row
+    fwefwe
     # Compute bias
     bias = sdata['ZREDMAGIC'] - sdata['ZSPEC']
 
@@ -376,6 +399,7 @@ class DiffusionMap(object):
         stored internally.
         """
 
+        # print "diffusionMap.make_map"
         kwargs=dict()
         kwargs['eps_val'] = self.par.item()
         kwargs['t']=1
@@ -389,13 +413,12 @@ class DiffusionMap(object):
         temp_folder = tempfile.mkdtemp()
         filename = os.path.join(temp_folder, 'dm_X.mmap')
         if os.path.exists(filename): os.unlink(filename)
-        _ = joblib.dump(self.dmap.X ,filename)
+        joblib.dump(self.dmap.X ,filename)
         del self.dmap.X
-        _ = gc.collect()
+        gc.collect()
         self.dmap.X = joblib.load(filename, mmap_mode='r')
 
         self.neigen = self.dmap.neigen
-#        print 'Memory usage: %s (kb)' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
     def transform(self, x):
 
@@ -412,7 +435,11 @@ class DiffusionMap(object):
           DM coordinates for a set of points
         """
         #### NOTE Take advantage of the fact that self.data.x*self metric is a temp object
-
+        print "diffusionMap.transform",
+        if  x == self.X:
+            print " of self.X"
+            return self.dmap.X
+        print "of new x"
         return diffuse.nystrom(self.dmap, self.X*self.metric, x*self.metric)
 
 
@@ -475,8 +502,17 @@ class MyEstimator(sklearn.base.BaseEstimator):
 
     def score(self,x,y):
         X = self.dm.transform(x)
+
+        temp_folder = tempfile.mkdtemp()
+        filename = os.path.join(temp_folder, 'X.mmap')
+        if os.path.exists(filename): os.unlink(filename)
+        joblib.dump(X ,filename)
+        del X
+        gc.collect()
+        X = joblib.load(filename, mmap_mode='r')
+
         ans = self.estimator.score(X,y)
-        print ans
+        return ans
 
 if __name__ == '__main__':
 
@@ -509,24 +545,38 @@ if __name__ == '__main__':
     temp_folder = tempfile.mkdtemp()
     filename = os.path.join(temp_folder, 'train_data.mmap')
     if os.path.exists(filename): os.unlink(filename)
-    _ = joblib.dump(train_data ,filename)
-    #del train_data,test_data
-    _ = gc.collect()
-
+    joblib.dump(train_data ,filename)
+    del train_data
+    gc.collect()
     train_data = joblib.load(filename, mmap_mode='r')
+    filename = os.path.join(temp_folder, 'test_data.mmap')
+    if os.path.exists(filename): os.unlink(filename)
+    joblib.dump(test_data ,filename)
+    del test_data
+    gc.collect()
+    test_data = joblib.load(filename, mmap_mode='r')
 
     train_y = clump1(train_data)+2*clump2(train_data)+3*clump3(train_data)
     test_y = clump1(test_data)+2*clump2(test_data)+3*clump3(test_data)
 
-    c = classifier()
-    c.fit(train_data.x,train_y,sample_weight=(train_y !=0).astype(int))
-    w=test_y != 0
-    print c.score(test_data.x[w],test_y[w])
+    w = train_y != 0
+    weight=numpy.array(w.astype(float))
+    weight[:]=(1./(len(w)-w.sum()))**2
+    weight[w]=(1e2/w.sum())**2
+
+    # c = classifier()
+    # c.fit(train_data.x,train_y,sample_weight=weight)
+    # w=test_y != 0
+    # print c.score(test_data.x[w],test_y[w])
+    # w = test_y==0
+    # print c.score(test_data.x[w],test_y[w])
 
     c=MyEstimator(classifier)
-    c.fit(train_data.x,train_y,sample_weight=(train_y !=0).astype(int))
+    c.fit(train_data.x,train_y,sample_weight=weight)
+    w=test_y != 0
     print c.score(test_data.x[w],test_y[w])
-
+    w = test_y==0
+    print c.score(test_data.x[w],test_y[w])
     wefwef
     # Plots.dataPlots(test_data)
 
@@ -549,7 +599,7 @@ if __name__ == '__main__':
     filename = os.environ['SCRATCH']+'/diffusionMap/results/clf_mpi_color.pkl'
     joblib.dump(clf, filename) 
     clf.best_estimator_.plots(train_data)
-#    clf.score(test_data.x,test_data.y)
+    # clf.score(test_data.x,test_data.y)
     sys.exit()
 
  #    #diffusion map solution

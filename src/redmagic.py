@@ -279,7 +279,8 @@ class Data(object):
 def manage_data(test_size=0.1, random_state=7):
     # Load training data
     import astropy.io.fits
-    f = astropy.io.fits.open('../data/dr8_run_redmapper_v6.3.1_redmagic_0.5-10_wdr12.fit')
+#    f = astropy.io.fits.open('../data/dr8_run_redmapper_v6.3.1_redmagic_0.5-10_wdr12.fit')
+    f = astropy.io.fits.open('../data/sva1_gold_1.0.2_run_redmapper_v6.3.3_redmagic_0.5-10.fit')
     data = f[1].data
 
     # Get rid of entries without spectroscopic redshifts.
@@ -293,7 +294,7 @@ def manage_data(test_size=0.1, random_state=7):
     inds = numpy.logical_and(sdata['ZREDMAGIC'] >= zmin, sdata['ZREDMAGIC'] < zmax)
     sdata = sdata[inds]
 
-    ids = "("+",".join(map(str,sdata['ID'][0:10]))+")"
+    ids = "("+",".join(map(str,sdata['COADD_OBJECTS_ID'][0:10]))+")"
 
     import cx_Oracle
     import ConfigParser
@@ -310,12 +311,14 @@ def manage_data(test_size=0.1, random_state=7):
     connection = cx_Oracle.connect(user+'/'+passwd+'@'+server+'/'+name)
     cursor = connection.cursor()
 
-    command = "select * from SVA1_COADD where coadd_objects_id in "+ids
-    print command
+# https://opensource.ncsa.illinois.edu/confluence/display/DESDM/Overview+of+data+columns+in+DES+Databases#OverviewofdatacolumnsinDESDatabases-Surfacebrightness
+    command = "select coadd_objects_id , CLASS_STAR_R, CLASS_STAR_G, CLASS_STAR_I, CLASS_STAR_Z from SVA1_COADD where coadd_objects_id in "+ids
+
     cursor.execute(command)
+
     for row in cursor:
       print row
-    fwefwe
+    wefe
     # Compute bias
     bias = sdata['ZREDMAGIC'] - sdata['ZSPEC']
 
@@ -352,8 +355,8 @@ def manage_data(test_size=0.1, random_state=7):
 
     # l=len(z_test)
 
-    return Data(X_train, y_train, z_train,dz_train, xlabel=['u-g','g-r','r-i','i-z','i','Photo-z'], ylabel='bias',zlabel='photo-z'), \
-        Data(X_test,  y_test, z_test,dz_test,xlabel=['u-g','g-r','r-i','i-z','i','Photo-z'], ylabel='bias',zlabel='photo-z')
+    return Data(X_train, y_train, z_train,dz_train, xlabel=['g-r','r-i','i-z','i','Photo-z'], ylabel='bias',zlabel='photo-z'), \
+        Data(X_test,  y_test, z_test,dz_test,xlabel=['g-r','r-i','i-z','i','Photo-z'], ylabel='bias',zlabel='photo-z')
 
 
 import resource
